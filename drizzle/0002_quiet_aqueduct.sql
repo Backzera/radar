@@ -1,0 +1,1 @@
+ALTER TABLE `provider_runs` ADD `request_snapshot` text DEFAULT '{}' NOT NULL;

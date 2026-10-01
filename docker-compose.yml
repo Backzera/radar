@@ -1,0 +1,23 @@
+# Somente preview local. Aplique migrations explicitamente antes de iniciar.
+services:
+  radar:
+    build: .
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - radar-data:/app/.wrangler
+      - ./.dev.vars:/app/.dev.vars:ro
+    restart: unless-stopped
+  worker:
+    build: .
+    command: ["node", "scripts/worker.mjs"]
+    environment:
+      RADAR_API_URL: http://radar:5173
+      ALLOW_INSECURE_LOCAL_WORKER_HTTP: "true"
+    volumes:
+      - ./.dev.vars:/app/.dev.vars:ro
+    depends_on:
+      - radar
+    restart: unless-stopped
+volumes:
+  radar-data:

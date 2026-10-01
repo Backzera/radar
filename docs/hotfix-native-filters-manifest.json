@@ -1,0 +1,158 @@
+{
+  "patch": "native-period-radius-strict-v1",
+  "target": "Market Radar 2.0.0-rc.1",
+  "base_archive": "market-radar-2.0-source.zip",
+  "base_archive_sha256": "c8eeb9f9d859729476a24e7176de24c9da6698fbea3a38d27b409e9bae519ee0",
+  "manifest_scope": "Todos os arquivos do patch exceto este manifesto, para evitar hash autorreferente.",
+  "does_not_modify": [
+    "package.json",
+    "package-lock.json",
+    ".env.example",
+    ".dev.vars",
+    ".wrangler",
+    "migrations",
+    "budgets",
+    "provider snapshots"
+  ],
+  "source_files": [
+    {
+      "path": "components/saas/account-panel.tsx",
+      "operation": "modify",
+      "before_sha256": "e60f854fd15f57ec902dd7daf7d610b98ceb30ed6ae25ff7473c05008081ca2d",
+      "after_sha256": "63955273fabe19aaa3e51ee15a6eb0be804f23c605ccc5fd7e93b460d28d3af2",
+      "bytes": 18716
+    },
+    {
+      "path": "components/saas/native-filter-panel.tsx",
+      "operation": "add",
+      "before_sha256": null,
+      "after_sha256": "bcb58a33ca8b97502379e566988036e5d1f28d0ce596ea888bd0bca9dfaa5412",
+      "bytes": 7272
+    },
+    {
+      "path": "components/saas/search-wizard.tsx",
+      "operation": "modify",
+      "before_sha256": "86809297780e68ef52ce88066e6cc8c6eb3770e29b37e2331624d213a104074a",
+      "after_sha256": "e99fce7e0bd909269492d33921c56531ce3b02a5b784775605acaf0b34384956",
+      "bytes": 27607
+    },
+    {
+      "path": "core/provider-query.ts",
+      "operation": "modify",
+      "before_sha256": "7c58d09f11b6f5185433e430a1a8754a47d4cb45bb9a97407dac1bde9cdf580e",
+      "after_sha256": "04e90e85b93607d1fdd9fa89337150b3e3615293bf872171e1cb0d26b521a7f0",
+      "bytes": 2861
+    },
+    {
+      "path": "core/run-diagnostics.ts",
+      "operation": "modify",
+      "before_sha256": "95375e265145ad9eca5a34c8bd704d1d08cfdcfe39c9addba57b76012513254e",
+      "after_sha256": "2207e3e71ddda4aa2e8ff543a753cd098702d621386ba553ebe103f952e570e9",
+      "bytes": 4845
+    },
+    {
+      "path": "providers/brightdata-schema.ts",
+      "operation": "modify",
+      "before_sha256": "4d448dbdd3fe5f29964798b06628640129c08c182b242c028d987b820109def1",
+      "after_sha256": "69dec7bfc51470790bf1cb1c3a8edc3b0bd0c2fa74d325b7aa810bb203911421",
+      "bytes": 15711
+    },
+    {
+      "path": "providers/brightdata.ts",
+      "operation": "modify",
+      "before_sha256": "5a0c9a5084676c5606564dc3a7808d8a4ee519cef538cbfca807b6c8b89e2d46",
+      "after_sha256": "3705534b15b0b1de7b1389dc6e4da65ebd6e00683a83c6ace9cba8ae1a058488",
+      "bytes": 20190
+    },
+    {
+      "path": "providers/contract.ts",
+      "operation": "modify",
+      "before_sha256": "f6e49b3e2b462472f5dce8e5755634056275427a11ff9e80c695853eb21756fb",
+      "after_sha256": "f60435928fc41945f6e14313f9337d4712a0d649bbcee4594c02d6874c8bfabf",
+      "bytes": 3086
+    },
+    {
+      "path": "providers/input-confirmation.ts",
+      "operation": "add",
+      "before_sha256": null,
+      "after_sha256": "66db40b269fd4848b3b13d1461359fb8e3432c16a75146af45d7fada4760734e",
+      "bytes": 2902
+    },
+    {
+      "path": "providers/search-policy.ts",
+      "operation": "modify",
+      "before_sha256": "f285e4cf7678c489205aed654793d9a3e8dc963740bb16081d12f67e22551180",
+      "after_sha256": "bf13850fad072e10753d6c64b1410749a991eade8e77a0b3bcedbae4ce78783d",
+      "bytes": 5681
+    },
+    {
+      "path": "server/bootstrap.ts",
+      "operation": "modify",
+      "before_sha256": "640dceb0813822f0c9ef7b9d253f620aae2de1127ed34c55b60b7240077624fe",
+      "after_sha256": "39dff1e0421d1a9f5135017bc48fcc19fb23f7bab0eeb5d55188d5463623f5d4",
+      "bytes": 11748
+    },
+    {
+      "path": "server/http.ts",
+      "operation": "modify",
+      "before_sha256": "6d7447b49fdb68bbbcfaf6ed7887de5f1859c2ad1f23baff5c0b7d55acc43e8f",
+      "after_sha256": "038955fa25d2b3d524f3c5e37812b03582dd3ebc0b8fc44ed46f7c3b1f9e8da4",
+      "bytes": 26040
+    },
+    {
+      "path": "server/input-confirmation.ts",
+      "operation": "add",
+      "before_sha256": null,
+      "after_sha256": "bc03418749e903a292bbefe0dbde29e13e41f6aa7b79ed5540c8762a7b15ff54",
+      "bytes": 6409
+    },
+    {
+      "path": "server/worker.ts",
+      "operation": "modify",
+      "before_sha256": "b25092afdc25c2af5fb8467ade09535bd3e03b66aae096ac83e6f4a7d46f0633",
+      "after_sha256": "50428a7770bda51e2737d619a7e9eaefd3ef22fdbcd05f5c416306d7a83620c9",
+      "bytes": 27398
+    },
+    {
+      "path": "tests/manual-search-hotfix.test.ts",
+      "operation": "modify",
+      "before_sha256": "da669c744d8ef1a9bf0fa135fbeb422128daa46073baff7a28a37e82ac8db17c",
+      "after_sha256": "47ef105f667b50fd23b435ebddf6aff3584107a38f27c1b06562bb76f075d845",
+      "bytes": 16915
+    },
+    {
+      "path": "tests/native-filters-hotfix.test.ts",
+      "operation": "add",
+      "before_sha256": null,
+      "after_sha256": "fa39b408a959a198410bdb2054b2abc9210d83bd49acda7705b44d2798a5e11d",
+      "bytes": 19988
+    },
+    {
+      "path": "tests/v2-flows.test.ts",
+      "operation": "modify",
+      "before_sha256": "dd0de80aa0c8fa7041938fd76a577f7742bf558d06bd1b5d75bd38a1a82b1712",
+      "after_sha256": "877756d24b3c353d0979482579b5c1dc275e594823ae434bf5e43a0ba217050f",
+      "bytes": 20701
+    },
+    {
+      "path": "docs/hotfix-native-filters.md",
+      "operation": "add",
+      "before_sha256": null,
+      "after_sha256": "270ac5ca8dda563fe895f51f76838ddd031ffe64f3f29912f7793bbc7f7017c9",
+      "bytes": 9600
+    }
+  ],
+  "validation": {
+    "base_tests_passed": 183,
+    "tests_passed": 199,
+    "tests_failed": 0,
+    "tests_skipped": 0,
+    "typecheck": "passed",
+    "eslint": "passed",
+    "component_harness_bundle": "passed",
+    "full_build": "blocked_missing_rolldown_linux_binding",
+    "browser_clicks": "not_executed",
+    "paid_requests": 0,
+    "github_writes": 0
+  }
+}

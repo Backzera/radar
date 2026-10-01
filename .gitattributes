@@ -1,0 +1,5 @@
+# Mantém LF no checkout: migrations têm hash conferido e scripts .sh rodam em Linux.
+* text=auto eol=lf
+*.sqlite binary
+*.png binary
+*.ico binary

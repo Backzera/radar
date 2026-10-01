@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "origin": "synthetic-regressions-not-live-listings",
+  "cases": [
+    {
+      "title": "iPhone 15 128GB usado",
+      "description": "Troco por Samsung Galaxy S23 256GB.",
+      "model": "iPhone 15",
+      "storage": 128,
+      "partialPrice": true
+    },
+    {
+      "title": "Fifine A8 USB usado",
+      "description": "Microfone completo",
+      "model": "Fifine A8",
+      "storage": null,
+      "partialPrice": false
+    },
+    {
+      "title": "MacBook Pro 2017 i5 256GB usado",
+      "description": "Modelo Intel",
+      "model": "MacBook Pro 2017",
+      "storage": 256,
+      "partialPrice": false
+    },
+    {
+      "title": "iPhone 15 128GB usado",
+      "description": "R$ 2.500 pelo aparelho completo, sem entrada ou parcelas.",
+      "model": "iPhone 15",
+      "storage": 128,
+      "partialPrice": false
+    },
+    {
+      "title": "iPhone 15 128GB usado",
+      "description": "Entrada de R$ 500 e parcelas",
+      "model": "iPhone 15",
+      "storage": 128,
+      "partialPrice": true
+    },
+    {
+      "title": "iPhone 15 128GB usado",
+      "description": "10 parcelas de R$ 250",
+      "model": "iPhone 15",
+      "storage": 128,
+      "partialPrice": true
+    },
+    {
+      "title": "Vendo somente capinha iPhone 15",
+      "description": "Apenas acessório",
+      "model": "iPhone 15",
+      "storage": null,
+      "partialPrice": true
+    },
+    {
+      "title": "iPhone 15 128GB usado",
+      "description": "Acompanha capinha e kit de acessórios",
+      "model": "iPhone 15",
+      "storage": 128,
+      "partialPrice": false
+    },
+    {
+      "title": "Kit 2 iPhone 15 128GB usados",
+      "description": "Preço dos dois aparelhos",
+      "model": "iPhone 15",
+      "storage": 128,
+      "partialPrice": true
+    }
+  ]
+}

@@ -1,0 +1,188 @@
+[
+  {
+    "id": "gd_lvt9iwuh6fbcwmx1a",
+    "name": "Facebook Marketplace",
+    "domain": "facebook.com",
+    "scraper_type": [
+      "collect_by_url",
+      "discover_by_keyword",
+      "discover_by_url"
+    ],
+    "scrapers": {
+      "collect_by_url": {
+        "input_schema": [
+          {
+            "name": "url",
+            "type": "url",
+            "required": true
+          }
+        ],
+        "output_fields": [
+          {
+            "name": "url",
+            "type": "url",
+            "description": "The direct URL of the Facebook Marketplace listing page"
+          },
+          {
+            "name": "title",
+            "type": "text",
+            "description": "The title of the listing as posted by the seller"
+          },
+          {
+            "name": "initial_price",
+            "type": "number",
+            "description": "The original listed price of the item before any discounts"
+          },
+          {
+            "name": "final_price",
+            "type": "number",
+            "description": "The current or discounted price of the item"
+          },
+          {
+            "name": "currency",
+            "type": "text",
+            "description": "The currency in which the price is listed"
+          },
+          {
+            "name": "product_id",
+            "type": "text",
+            "description": "The unique identifier assigned to the listing by Facebook Marketplace."
+          },
+          {
+            "name": "breadcrumbs",
+            "type": "array",
+            "description": "A list of navigation breadcrumb items representing the category hierarchy of the listing"
+          },
+          {
+            "name": "condition",
+            "type": "text",
+            "description": "The condition of the listed item as reported by the seller"
+          },
+          {
+            "name": "description",
+            "type": "text",
+            "description": "The full textual description of the listing, as written by the seller"
+          },
+          {
+            "name": "location",
+            "type": "text",
+            "description": "The general location"
+          },
+          {
+            "name": "country_code",
+            "type": "text",
+            "description": "The two-letter ISO 3166-1 alpha-2 country code"
+          },
+          {
+            "name": "root_category",
+            "type": "text",
+            "description": "The root category the listing belongs to on Facebook Marketplace"
+          },
+          {
+            "name": "images",
+            "type": "array",
+            "description": "A list of URLs pointing to the listing's product images uploaded by the seller"
+          },
+          {
+            "name": "seller_description",
+            "type": "text",
+            "description": "A short bio or description from the seller's Facebook Marketplace profile"
+          },
+          {
+            "name": "color",
+            "type": "text",
+            "description": "The color of the listed item, if applicable and provided by the seller"
+          },
+          {
+            "name": "brand",
+            "type": "text",
+            "description": "The brand or manufacturer of the listed item, if applicable"
+          },
+          {
+            "name": "videos",
+            "type": "array",
+            "description": "A list of URLs pointing to any video content uploaded by the seller as part of the listing"
+          },
+          {
+            "name": "profile_id",
+            "type": "text",
+            "description": "The unique Facebook profile ID of the seller who posted the listing"
+          },
+          {
+            "name": "listing_date",
+            "type": "date",
+            "description": "The date and time when the listing was originally posted on Facebook Marketplace"
+          },
+          {
+            "name": "car_miles",
+            "type": "number",
+            "description": "The mileage of the vehicle as reported by the seller. Only relevant for car/vehicle listings"
+          },
+          {
+            "name": "is_sold",
+            "type": "boolean",
+            "description": "Indicates whether the product is sold"
+          },
+          {
+            "name": "transmission",
+            "type": "text",
+            "description": "Transmission type shown in vehicle details. Only relevant for car/vehicle listings"
+          }
+        ],
+        "link": "https://brightdata.com/cp/scrapers/gd_lvt9iwuh6fbcwmx1a/pdp/configuration"
+      },
+      "discover_by_keyword": {
+        "input_schema": [
+          {
+            "name": "keyword",
+            "type": "text",
+            "required": true
+          },
+          {
+            "name": "city",
+            "type": "text",
+            "required": true
+          },
+          {
+            "name": "radius",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "date_listed",
+            "type": "text",
+            "required": false
+          }
+        ],
+        "output_fields": [
+          {
+            "name": "url",
+            "type": "url"
+          }
+        ],
+        "link": "https://brightdata.com/cp/scrapers/gd_lvt9iwuh6fbcwmx1a/keyword/configuration"
+      },
+      "discover_by_url": {
+        "input_schema": [
+          {
+            "name": "url",
+            "type": "url",
+            "required": true
+          },
+          {
+            "name": "country",
+            "type": "country",
+            "required": false
+          }
+        ],
+        "output_fields": [
+          {
+            "name": "url",
+            "type": "url"
+          }
+        ],
+        "link": "https://brightdata.com/cp/scrapers/gd_lvt9iwuh6fbcwmx1a/url/configuration"
+      }
+    }
+  }
+]

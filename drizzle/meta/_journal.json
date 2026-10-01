@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1789089980573,
+      "tag": "0000_certain_zarda",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789094304422,
+      "tag": "0001_mature_madame_hydra",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789184305172,
+      "tag": "0002_quiet_aqueduct",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789189405964,
+      "tag": "0003_fearless_bill_hollister",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789198921414,
+      "tag": "0004_old_anita_blake",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1789578217807,
+      "tag": "0005_saas_foundation",
+      "breakpoints": false
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1789600051069,
+      "tag": "0006_radar_experience",
+      "breakpoints": true
+    }
+  ]
+}

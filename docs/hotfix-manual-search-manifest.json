@@ -1,0 +1,124 @@
+{
+  "base_zip": "market-radar-saas-dev.zip",
+  "base_sha256": "29a7aa904352efe66aee55d8bd999a7c80c7b0768924354228ba39a778ca8c39",
+  "target_version": "2.0.0-dev.1",
+  "changes": [
+    {
+      "path": "LEIA-ME-CORRECAO.md",
+      "type": "added",
+      "before_sha256": null,
+      "after_sha256": "37cc6d76d08f3c4d0776c90dd6f90be02865f865def9d8a2f591b5e9c51f9bf3"
+    },
+    {
+      "path": "README.md",
+      "type": "modified",
+      "before_sha256": "be37ffc9bc7cbd9700cca6eb09cd347474c8cb796916c668064094a77655be4d",
+      "after_sha256": "1f1ebbc2c2a194f71a4d0f3684de94ab4b8cc9134786c7a447ce87f7177c8159"
+    },
+    {
+      "path": "components/saas/results-feed.tsx",
+      "type": "modified",
+      "before_sha256": "27a757f3bb5a383d8dc3a784cfcf211416ea81e884e75781d82dd4b0f4c9bef6",
+      "after_sha256": "e4a0d5c2bfe3c4f5f1d7c2b6364dce301005be715d2c36f6f9e5718ac35869b7"
+    },
+    {
+      "path": "components/saas/search-list.tsx",
+      "type": "modified",
+      "before_sha256": "f4ac935379f7f4634b8eb13ab3402340b7e047a6baab06b9dfc92159f5c44017",
+      "after_sha256": "44f18fa3b0d304d27b7ca71d317f0c036d9748f9815c92aba5f5dd5395a3c5c5"
+    },
+    {
+      "path": "core/run-diagnostics.ts",
+      "type": "added",
+      "before_sha256": null,
+      "after_sha256": "95375e265145ad9eca5a34c8bd704d1d08cfdcfe39c9addba57b76012513254e"
+    },
+    {
+      "path": "docs/hotfix-manual-search.md",
+      "type": "added",
+      "before_sha256": null,
+      "after_sha256": "efd2904af4f53569e127ad9846608338bfd5cca8eac1b87b02619f2cc1bcebdd"
+    },
+    {
+      "path": "package.json",
+      "type": "modified",
+      "before_sha256": "547d99fecc67cce9d15962b5bc6d2dcbe97e05c86d6f3b4e0ccd6888da24a752",
+      "after_sha256": "2ec3ffb1dbeb3d4bc45165af893a0e7b60ac09b39f93688c99760342bc466557"
+    },
+    {
+      "path": "providers/brightdata-schema.ts",
+      "type": "modified",
+      "before_sha256": "616ce9ec9e11d6d13be65fac41f6233dbbd93c5877b5fd0006a45ae81ead5491",
+      "after_sha256": "4d448dbdd3fe5f29964798b06628640129c08c182b242c028d987b820109def1"
+    },
+    {
+      "path": "providers/brightdata.ts",
+      "type": "modified",
+      "before_sha256": "76dfeb6e0e5d721c9a10f8c7ffb88210b3e7da19db4c833f18f83bcd6be030ef",
+      "after_sha256": "2ff3f6075e52d1b8cb3761c629730e7fa4d46564cf0f2f5d746bc59da2c737e4"
+    },
+    {
+      "path": "scripts/dev-local.mjs",
+      "type": "added",
+      "before_sha256": null,
+      "after_sha256": "8287c93f435b6e85bfe76a1f725f57b7d01a8592e29105aa0ae36c3b4c49cc1d"
+    },
+    {
+      "path": "scripts/worker-log.mjs",
+      "type": "added",
+      "before_sha256": null,
+      "after_sha256": "f090ebd7ffb2916b9c21dc28052f1f50a5bb489666e40947c77477f5b2b40e56"
+    },
+    {
+      "path": "scripts/worker.mjs",
+      "type": "modified",
+      "before_sha256": "0f473dff0267676e65b8fa0919f85fdc925d1b613d3f0fee40b8959d9766d961",
+      "after_sha256": "719e9478a3081ed1ddc73ca80fe03b4d1629f523ff200ed5cf6421340ab76387"
+    },
+    {
+      "path": "server/bootstrap.ts",
+      "type": "modified",
+      "before_sha256": "a419c630080df47eb5ffbc6734dbd0a57419c9cc8ec88d6f1149bc2285c065b0",
+      "after_sha256": "941ac2c77005d810f9fd5f261dd40ff026f385f70bf5dc56d27b7de5b6c178c8"
+    },
+    {
+      "path": "server/http.ts",
+      "type": "modified",
+      "before_sha256": "ef7b7089ca0d7145ce7d83b314870ed73d52064653c15f63ec9f32df5a772fef",
+      "after_sha256": "8eb3d869b91612e9096cc3377d61456e4d8e66fdc24d12a26bac714aa256ca4d"
+    },
+    {
+      "path": "server/supervisor.ts",
+      "type": "modified",
+      "before_sha256": "10c3bdd4e4bf92b66c9970ec1e5c618a8ad238ec0ea6ed64694cc3768219051d",
+      "after_sha256": "170ff828f82f8cf856e7544daf8decfd2c1b15db761718fe275d44373f34f555"
+    },
+    {
+      "path": "server/worker.ts",
+      "type": "modified",
+      "before_sha256": "e84bb63df9967c2252796bb1b86b9cd541752e3b06b20a5d8dcbeb09d261b1cd",
+      "after_sha256": "03c8f8220d3088cd18cabcbea8c884369a63061fb5488028a6df3cc10cac7ca2"
+    },
+    {
+      "path": "tests/dev-hotfix.test.mjs",
+      "type": "added",
+      "before_sha256": null,
+      "after_sha256": "c7f9f4b5c4332e61c316315235a8db850288a425df12bf2c8a649c4fb39ce9dc"
+    },
+    {
+      "path": "tests/manual-search-hotfix.test.ts",
+      "type": "added",
+      "before_sha256": null,
+      "after_sha256": "da669c744d8ef1a9bf0fa135fbeb422128daa46073baff7a28a37e82ac8db17c"
+    },
+    {
+      "path": "vite.config.ts",
+      "type": "modified",
+      "before_sha256": "b6f6029208766b7daffb05f88d57903f0c205b56db8ce0dde52a3a5ba2b02d12",
+      "after_sha256": "01e12024dee2b6dcb460faa9ac155b01f70b78ec4255290a4e0f9b806ccb544a"
+    }
+  ],
+  "dependencies_changed": false,
+  "migrations_changed": false,
+  "private_configuration_included": false
+}

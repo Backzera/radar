@@ -1,0 +1,29 @@
+name: Validate Market Radar
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COLLECTION_ENABLED: "false"
+      EXTERNAL_ALERTS_ENABLED: "false"
+      WRANGLER_SEND_METRICS: "false"
+      CLOUDFLARE_CF_FETCH_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+          cache: npm
+      - run: npm ci --include=dev --include=optional --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run check:source-secrets
+      - run: npm run build
+      - run: npm run check-secrets
