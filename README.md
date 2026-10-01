@@ -49,7 +49,7 @@ npm run check:source-secrets
 npm run build
 ```
 
-A execução desta entrega obteve 183 testes passando. TypeScript e lint passaram. O bundle de testes dos componentes compilou. O build completo Linux não passou por falta de dependência nativa Rolldown; o navegador deste ambiente bloqueou a página local. Não houve coleta paga, teste em Windows nem validação de produção.
+Em 01/10/2026, no Windows com Node 24: 209 testes passando, TypeScript, lint e build completo passaram. A interface ativa fica em `components/saas`; os componentes da V1 e o kit de interface sem uso foram removidos. Ainda não houve validação de produção.
 
 ## Documentação
 

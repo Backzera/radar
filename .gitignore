@@ -59,3 +59,6 @@ backups/
 
 # Pages saved by the collector probe hold third-party public data; never publish.
 .probe-output/
+
+# Configuração local do Claude Code (servidor de preview).
+/.claude/

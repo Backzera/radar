@@ -1,10 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { ListingEvidence } from "../components/listing-evidence";
 import { parseBRL, parsePublication } from "../core/provider-values";
 import { validateSearchUrl } from "../core/provider-query";
 import { discoveryDelay, freshness } from "../core/freshness";
@@ -268,7 +265,7 @@ test("URL discovery trata vazio, 429, 500, timeout e progresso inesperado", asyn
   );
   await assert.rejects(invalid.search(request), /progresso inesperada/);
 });
-test("unknown aparece no Radar, pode alertar e UI renderiza aviso explícito", async () => {
+test("unknown aparece no Radar e pode alertar", async () => {
   const { db, createUser } = database();
   await createUser();
   const m = await saveMonitor(db, "u1", {
@@ -308,13 +305,6 @@ test("unknown aparece no Radar, pode alertar e UI renderiza aviso explícito", a
   assert.equal(fresh.eligible, true);
   assert.ok(fresh.score >= 80);
   assert.ok(fresh.risk < 35);
-  const html = renderToStaticMarkup(
-    createElement(ListingEvidence, { opportunity: { ...o, analysis: fresh } }),
-  );
-  assert.match(html, /Disponibilidade não confirmada/);
-  assert.match(html, /FACEBOOK · BRIGHT DATA/);
-  assert.match(html, /Primeiro visto/);
-  assert.match(html, /Delay/);
   assert.equal((await getAlerts(db, "u1"))[0].availability, "unknown");
   assert.equal(
     (

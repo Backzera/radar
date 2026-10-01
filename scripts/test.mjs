@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync, readdirSync } from "node:fs";
+import { mkdirSync, writeFileSync, readdirSync, rmSync } from "node:fs";
+// Start clean: a compiled test whose source was deleted must not keep running.
+rmSync(".test-build", { recursive: true, force: true });
 mkdirSync(".test-build", { recursive: true });
 writeFileSync(".test-build/package.json", JSON.stringify({ type: "commonjs" }));
 const compile = spawnSync(
