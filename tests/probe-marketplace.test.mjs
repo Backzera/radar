@@ -321,6 +321,58 @@ test("sonda: Scrapfly lê o custo do cabeçalho e a chave pode vir do .dev.vars"
   assert.ok(!output.includes("chave-do-arquivo"));
 });
 
+test("sonda: modo direct vai direto ao site, sem chave, sem cookie e sem custo", async (t) => {
+  const preview = buildRequest({ vendor: "direct", url: URL_OK }, {});
+  assert.equal(preview.url, URL_OK);
+  assert.deepEqual(preview.secrets, []);
+  assert.match(preview.init.headers["user-agent"], /Chrome/);
+  assert.match(preview.init.headers["accept-language"], /pt-BR/);
+  assert.ok(!Object.keys(preview.init.headers).includes("cookie"));
+  const lines = [];
+  let sent = "";
+  const code = await main(["--vendor", "direct", "--url", URL_OK], {}, {
+    root: temporary(t),
+    now: () => NOW,
+    log: (line) => lines.push(line),
+    fetch: async (url) => {
+      sent = url;
+      return new Response(FIXTURE_HTML, { status: 200 });
+    },
+  });
+  const output = lines.join("\n");
+  assert.equal(code, 0);
+  assert.equal(sent, URL_OK);
+  assert.match(output, /Sonda do Marketplace · direct/);
+  assert.match(output, /Custo: nenhum/);
+  assert.ok(!output.includes("por 1.000 anúncios"));
+  assert.ok(!output.includes("não informa o custo"));
+});
+
+test("sonda: modo direct acusa redirecionamento para login e recusa do site", async (t) => {
+  const run = async (response) => {
+    const lines = [];
+    const code = await main(["--vendor", "direct", "--url", URL_OK], {}, {
+      root: temporary(t),
+      now: () => NOW,
+      log: (line) => lines.push(line),
+      fetch: async () => response,
+    });
+    return { code, output: lines.join("\n") };
+  };
+  const login = await run({
+    ok: true,
+    status: 200,
+    url: "https://www.facebook.com/login/?next=marketplace",
+    text: async () => "<html>entre</html>",
+    headers: new Headers(),
+  });
+  assert.equal(login.code, 0);
+  assert.match(login.output, /BLOQUEADO/);
+  const refused = await run(new Response("<html>limite</html>", { status: 429 }));
+  assert.equal(refused.code, 1);
+  assert.match(refused.output, /o Facebook respondeu HTTP 429/);
+});
+
 test("sonda: erro do fornecedor sai limpo, sem chave nem URL", async (t) => {
   const lines = [];
   const code = await main(

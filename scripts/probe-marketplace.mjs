@@ -34,11 +34,19 @@ const VALUE_OPTIONS = new Set([
   "credit-usd",
 ]);
 const FLAG_OPTIONS = new Set(["dry-run", "save", "js", "asp", "help"]);
+// Plain browser headers for --vendor direct: no cookies, no session, no login.
+const DIRECT_HEADERS = {
+  "user-agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+  accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "accept-language": "pt-BR,pt;q=0.9,en;q=0.5",
+};
 
 export const USAGE = `Sonda do Marketplace: 1 requisição por execução, sem tocar no banco do app.
 
 Uso:
   npm run probe:marketplace -- --vendor scrapfly --url "<busca do Marketplace>"
+  npm run probe:marketplace -- --vendor direct --url "<busca>"   (desta máquina, sem fornecedor)
   npm run probe:marketplace -- --vendor scrapeninja --url "<busca>" [--engine scrape|js|v2]
   npm run probe:marketplace -- --file pagina.html [--url "<busca>"]   (sem rede)
   npm run probe:marketplace -- --vendor scrapfly --url "<busca>" --dry-run   (não envia)
@@ -69,8 +77,8 @@ export function parseArgs(argv) {
       options[toCamel(name)] = value;
     } else throw new UsageError(`Opção desconhecida: ${argv[i]}`);
   }
-  if (!["scrapeninja", "scrapfly"].includes(options.vendor))
-    throw new UsageError("--vendor deve ser scrapeninja ou scrapfly.");
+  if (!["scrapeninja", "scrapfly", "direct"].includes(options.vendor))
+    throw new UsageError("--vendor deve ser scrapeninja, scrapfly ou direct.");
   if (!Object.hasOwn(NINJA_PATHS, options.engine))
     throw new UsageError("--engine deve ser scrape, js ou v2.");
   if (!["residential", "datacenter"].includes(options.pool))
@@ -120,6 +128,13 @@ export function assertMarketplaceUrl(value) {
 // `url` and `init` carry the credentials; only `preview` is safe to print.
 export function buildRequest(options, config, dryRun = options.dryRun) {
   const target = assertMarketplaceUrl(options.url);
+  if (options.vendor === "direct")
+    return {
+      url: target,
+      init: { method: "GET", headers: DIRECT_HEADERS },
+      preview: { method: "GET", endpoint: target, headers: DIRECT_HEADERS },
+      secrets: [],
+    };
   const keyName =
     options.vendor === "scrapfly" ? "SCRAPFLY_KEY" : "SCRAPENINJA_KEY";
   const key = config[keyName]?.trim() || (dryRun ? "<chave>" : "");
@@ -396,11 +411,14 @@ export function formatReport({ analysis: a, meta }) {
         ? ""
         : ` · ${(meta.elapsedMs / 1000).toFixed(1)} s`),
   ];
+  const direct = meta.vendor === "direct";
   const costUsd =
-    meta.credits == null
+    direct || meta.credits == null
       ? null
       : meta.credits * (meta.creditUsd ?? DEFAULT_CREDIT_USD);
-  if (costUsd !== null)
+  if (direct)
+    lines.push("Custo: nenhum (requisição direta desta máquina, sem fornecedor)");
+  else if (costUsd !== null)
     lines.push(
       `Custo informado pelo fornecedor: ${meta.credits} créditos ≈ US$ ${money(costUsd, 4)}`,
     );
@@ -512,22 +530,33 @@ export async function main(argv, env = process.env, deps = {}) {
       });
       const raw = await response.text();
       meta.elapsedMs = now() - started;
+      const direct = options.vendor === "direct";
       if (!response.ok)
         throw new Error(
-          `${options.vendor} respondeu HTTP ${response.status}: ${describeVendorError(raw) ?? cleanWorkerText(raw, secrets, 300)}`,
+          `${direct ? "o Facebook" : options.vendor} respondeu HTTP ${response.status}: ${describeVendorError(raw) ?? cleanWorkerText(raw, secrets, 300)}`,
         );
-      let payload;
-      try {
-        payload = JSON.parse(raw);
-      } catch {
-        throw new Error("A resposta do fornecedor não é JSON.");
+      let read;
+      if (direct)
+        read = {
+          status: response.status,
+          finalUrl: response.url || options.url,
+          body: raw,
+          credits: 0,
+        };
+      else {
+        let payload;
+        try {
+          payload = JSON.parse(raw);
+        } catch {
+          throw new Error("A resposta do fornecedor não é JSON.");
+        }
+        read = readVendorResponse(
+          options.vendor,
+          payload,
+          response.headers,
+          options.url,
+        );
       }
-      const read = readVendorResponse(
-        options.vendor,
-        payload,
-        response.headers,
-        options.url,
-      );
       if (
         typeof read.body === "string" &&
         read.body.length < 500 &&
