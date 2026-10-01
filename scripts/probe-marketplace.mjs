@@ -207,6 +207,27 @@ export function readVendorResponse(vendor, payload, headers, requested) {
   };
 }
 
+// A failed Scrapfly scrape echoes the whole config first; the reason sits in
+// result.error (or at the top level for API errors), past any short excerpt.
+export function describeVendorError(raw) {
+  let payload;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const error = payload?.result?.error ?? payload;
+  const upstream = payload?.result?.status_code;
+  const cost = Number(payload?.context?.cost?.total);
+  const parts = [
+    text(error?.code),
+    text(error?.message),
+    Number.isInteger(upstream) ? `o site respondeu HTTP ${upstream}` : null,
+    Number.isFinite(cost) ? `custo ${cost} créditos` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+
 // Pre-order, so listings come out in page order.
 function* walk(root, limit = 500_000) {
   const stack = [root];
@@ -493,7 +514,7 @@ export async function main(argv, env = process.env, deps = {}) {
       meta.elapsedMs = now() - started;
       if (!response.ok)
         throw new Error(
-          `${options.vendor} respondeu HTTP ${response.status}: ${cleanWorkerText(raw, secrets, 300)}`,
+          `${options.vendor} respondeu HTTP ${response.status}: ${describeVendorError(raw) ?? cleanWorkerText(raw, secrets, 300)}`,
         );
       let payload;
       try {

@@ -343,6 +343,42 @@ test("sonda: erro do fornecedor sai limpo, sem chave nem URL", async (t) => {
   assert.ok(!output.includes("api.scrapfly.io"));
 });
 
+test("sonda: erro do Scrapfly mostra código, motivo e custo que vêm depois do eco da configuração", async (t) => {
+  const lines = [];
+  const body = JSON.stringify({
+    config: {
+      url: URL_OK,
+      key: "chave-scrapfly-teste",
+      headers: { "accept-language": "pt-BR ".repeat(80) },
+    },
+    context: { cost: { total: 0 } },
+    result: {
+      status_code: 302,
+      error: {
+        code: "ERR::SCRAPE::BAD_UPSTREAM_RESPONSE",
+        message: "The website responded with a redirect",
+        retryable: false,
+      },
+    },
+  });
+  const code = await main(
+    ["--vendor", "scrapfly", "--url", URL_OK],
+    { SCRAPFLY_KEY: "chave-scrapfly-teste" },
+    {
+      root: temporary(t),
+      log: (line) => lines.push(line),
+      fetch: async () => new Response(body, { status: 422 }),
+    },
+  );
+  const output = lines.join("\n");
+  assert.equal(code, 1);
+  assert.match(output, /HTTP 422/);
+  assert.match(output, /ERR::SCRAPE::BAD_UPSTREAM_RESPONSE/);
+  assert.match(output, /o site respondeu HTTP 302/);
+  assert.match(output, /custo 0 créditos/);
+  assert.ok(!output.includes("chave-scrapfly-teste"));
+});
+
 test("sonda: sem chave, URL de fora do Marketplace e --file não chegam à rede", async (t) => {
   const root = temporary(t);
   const noNetwork = () => assert.fail("não pode usar a rede");
