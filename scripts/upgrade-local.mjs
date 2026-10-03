@@ -23,9 +23,15 @@ function files(dir) {
         );
 }
 export async function upgradeLocal(root = process.cwd()) {
-  const name = "0006_radar_experience.sql",
-    migration = join(root, "drizzle", name);
-  if (!existsSync(migration)) return { status: "no_update" };
+  const dir = join(root, "drizzle");
+  // 0000–0005 build a new database through migrate.mjs; from 0006 on, every
+  // migration is additive and is applied here to an existing local database.
+  const additive = existsSync(dir)
+    ? readdirSync(dir)
+        .filter((f) => /^\d{4}_[a-z0-9_]+\.sql$/i.test(f) && f >= "0006")
+        .sort()
+    : [];
+  if (!additive.length) return { status: "no_update" };
   const path = join(root, ".wrangler/radar-migrations.json");
   const journal = existsSync(path)
     ? JSON.parse(readFileSync(path, "utf8"))
@@ -43,9 +49,13 @@ export async function upgradeLocal(root = process.cwd()) {
           ". Restaure a source antes de iniciar.",
       );
   }
-  const content = readFileSync(migration),
-    digest = hash(content);
-  if (journal[name] === digest) return { status: "current" };
+  const pending = additive
+    .filter((name) => !journal[name])
+    .map((name) => {
+      const content = readFileSync(join(dir, name));
+      return { name, content, digest: hash(content) };
+    });
+  if (!pending.length) return { status: "current" };
   const matches = [];
   for (const f of files(join(root, ".wrangler/state")).filter((f) =>
     f.endsWith(".sqlite"),
@@ -79,7 +89,7 @@ export async function upgradeLocal(root = process.cwd()) {
     backup = join(
       root,
       "backups",
-      "radar-before-v2-" +
+      "radar-before-upgrade-" +
         Date.now() +
         "-" +
         randomUUID().slice(0, 8) +
@@ -91,7 +101,8 @@ export async function upgradeLocal(root = process.cwd()) {
     db.exec(
       "PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; BEGIN IMMEDIATE;",
     );
-    db.exec(content.toString("utf8"));
+    for (const migration of pending)
+      db.exec(migration.content.toString("utf8"));
     if (
       db.prepare("PRAGMA integrity_check").get().integrity_check !== "ok" ||
       db.prepare("PRAGMA foreign_key_check").all().length
@@ -107,7 +118,7 @@ export async function upgradeLocal(root = process.cwd()) {
     db.close();
   }
   // Migration is idempotent if a crash occurs between COMMIT and journal publication.
-  journal[name] = digest;
+  for (const migration of pending) journal[migration.name] = migration.digest;
   mkdirSync(join(root, ".wrangler"), { recursive: true });
   const temp = path + "." + randomUUID() + ".tmp";
   writeFileSync(temp, JSON.stringify(journal, null, 2) + "\n", { flag: "wx" });

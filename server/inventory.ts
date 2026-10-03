@@ -1,0 +1,815 @@
+/** Estoque do bricker: itens, custos extras, fotos, venda e resumo. Valores em centavos. */
+import { z } from "zod";
+import {
+  CATEGORIES,
+  CATEGORY_LABELS,
+  CHANNELS,
+  CHANNEL_LABELS,
+  CONDITIONS,
+  CONDITION_LABELS,
+  COST_KINDS,
+  PERIODS,
+  STATUSES,
+  STATUS_LABELS,
+  addDays,
+  isValidDate,
+  itemFigures,
+  summarize,
+  todayIn,
+  type Category,
+  type Status,
+} from "../core/brick";
+import { all, uid, type Database } from "./store";
+import { HttpError } from "./security";
+
+export const MAX_ITEMS = 5000;
+export const MAX_PHOTOS = 8;
+export const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
+
+/** The subset of an R2 bucket the app uses. */
+export interface MediaStore {
+  put(
+    key: string,
+    value: ArrayBuffer,
+    options?: { httpMetadata?: { contentType?: string } },
+  ): Promise<unknown>;
+  get(key: string): Promise<{ body: ReadableStream } | null>;
+  delete(keys: string | string[]): Promise<void>;
+}
+
+interface ItemRow {
+  id: string;
+  name: string;
+  category: Category;
+  brand: string | null;
+  model: string | null;
+  condition: (typeof CONDITIONS)[number];
+  identifier: string | null;
+  notes: string;
+  status: Status;
+  purchase_price_cents: number;
+  purchased_at: string;
+  purchase_channel: (typeof CHANNELS)[number];
+  purchase_from: string | null;
+  asking_price_cents: number | null;
+  sale_price_cents: number | null;
+  sale_fees_cents: number;
+  sold_at: string | null;
+  sale_channel: (typeof CHANNELS)[number] | null;
+  sold_to: string | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  costs_cents: number;
+  cover_photo_id: string | null;
+  photo_count: number;
+}
+const ITEM_SELECT = `SELECT i.*,
+  COALESCE((SELECT SUM(c.amount_cents) FROM inventory_costs c WHERE c.user_id=i.user_id AND c.item_id=i.id),0) AS costs_cents,
+  (SELECT p.id FROM inventory_photos p WHERE p.user_id=i.user_id AND p.item_id=i.id ORDER BY p.position,p.created_at LIMIT 1) AS cover_photo_id,
+  (SELECT COUNT(*) FROM inventory_photos p WHERE p.user_id=i.user_id AND p.item_id=i.id) AS photo_count
+  FROM inventory_items i WHERE i.user_id=?`;
+
+function present(row: ItemRow, today: string) {
+  const item = {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    brand: row.brand,
+    model: row.model,
+    condition: row.condition,
+    identifier: row.identifier,
+    notes: row.notes,
+    status: row.status,
+    purchasePriceCents: row.purchase_price_cents,
+    purchasedAt: row.purchased_at,
+    purchaseChannel: row.purchase_channel,
+    purchaseFrom: row.purchase_from,
+    askingPriceCents: row.asking_price_cents,
+    salePriceCents: row.sale_price_cents,
+    saleFeesCents: row.sale_fees_cents,
+    soldAt: row.sold_at,
+    saleChannel: row.sale_channel,
+    soldTo: row.sold_to,
+    version: row.version,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    costsCents: Number(row.costs_cents),
+    coverPhotoId: row.cover_photo_id,
+    photoCount: Number(row.photo_count),
+  };
+  return { ...item, figures: itemFigures(item, today) };
+}
+export type InventoryItem = ReturnType<typeof present>;
+
+const today = () => todayIn();
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max, `Use até ${max} caracteres.`)
+    .nullish()
+    .transform((v) => (v ? v : null));
+const cents = z
+  .number({ invalid_type_error: "Informe um valor." })
+  .int()
+  .min(0, "O valor não pode ser negativo.")
+  .max(100_000_000, "Valor acima do limite.");
+const date = z
+  .string()
+  .refine(isValidDate, "Data inválida.")
+  .refine((d) => d <= addDays(today(), 1), "A data não pode estar no futuro.");
+const itemFields = {
+  name: z
+    .string()
+    .trim()
+    .min(2, "Dê um nome ao produto.")
+    .max(120, "Use até 120 caracteres."),
+  category: z.enum(CATEGORIES),
+  brand: optionalText(80),
+  model: optionalText(80),
+  condition: z.enum(CONDITIONS),
+  identifier: optionalText(64),
+  notes: z.string().max(2000, "Use até 2.000 caracteres.").default(""),
+  status: z
+    .enum(["in_stock", "preparing", "listed", "reserved"])
+    .default("in_stock"),
+  purchasePriceCents: cents,
+  purchasedAt: date,
+  purchaseChannel: z.enum(CHANNELS),
+  purchaseFrom: optionalText(120),
+  askingPriceCents: cents.nullish().transform((v) => v ?? null),
+};
+const saleSchema = z
+  .object({
+    salePriceCents: cents.refine((v) => v > 0, "Informe o valor da venda."),
+    soldAt: date,
+    saleChannel: z.enum(CHANNELS),
+    saleFeesCents: cents.default(0),
+    soldTo: optionalText(120),
+  })
+  .strict();
+const createSchema = z
+  .object({ ...itemFields, sale: saleSchema.optional() })
+  .strict();
+const updateSchema = z
+  .object({
+    ...Object.fromEntries(
+      Object.entries(itemFields).map(([k, v]) => [k, v.optional()]),
+    ),
+    expectedVersion: z.number().int().min(1),
+  })
+  .strict();
+const costSchema = z
+  .object({
+    kind: z.enum(COST_KINDS),
+    description: z.string().trim().max(160).default(""),
+    amountCents: cents.refine((v) => v > 0, "Informe o valor do custo."),
+    spentAt: date,
+  })
+  .strict();
+export const listSchema = z
+  .object({
+    status: z.enum(["", "open", ...STATUSES]).default(""),
+    category: z.enum(["", ...CATEGORIES]).default(""),
+    q: z.string().max(120).default(""),
+    sort: z
+      .enum(["recent", "purchased", "sold", "profit", "days", "price"])
+      .default("recent"),
+    page: z.coerce.number().int().min(1).max(10000).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(24),
+  })
+  .strict();
+const preferencesSchema = z
+  .object({
+    monthlyGoalCents: cents.nullable(),
+    staleAfterDays: z.number().int().min(7).max(365),
+  })
+  .strict();
+
+async function itemRows(db: Database, userId: string) {
+  return all<ItemRow>(db, `${ITEM_SELECT} ORDER BY i.updated_at DESC`, userId);
+}
+async function itemRow(db: Database, userId: string, id: string) {
+  const row = await db
+    .prepare(`${ITEM_SELECT} AND i.id=?`)
+    .bind(userId, id)
+    .first<ItemRow>();
+  if (!row) throw new HttpError(404, "Produto não encontrado.");
+  return row;
+}
+
+const fold = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+export async function listItems(db: Database, userId: string, query: unknown) {
+  const q = listSchema.parse(query),
+    t = today();
+  const items = (await itemRows(db, userId)).map((r) => present(r, t));
+  const terms = fold(q.q).split(/\s+/).filter(Boolean);
+  const filtered = items.filter(
+    (i) =>
+      (!q.status ||
+        (q.status === "open" ? i.status !== "sold" : i.status === q.status)) &&
+      (!q.category || i.category === q.category) &&
+      terms.every((term) =>
+        fold(
+          [i.name, i.brand, i.model, i.identifier, i.notes, CATEGORY_LABELS[i.category]]
+            .filter(Boolean)
+            .join(" "),
+        ).includes(term),
+      ),
+  );
+  const by = {
+    recent: (a: InventoryItem, b: InventoryItem) => b.updatedAt.localeCompare(a.updatedAt),
+    purchased: (a: InventoryItem, b: InventoryItem) => b.purchasedAt.localeCompare(a.purchasedAt),
+    sold: (a: InventoryItem, b: InventoryItem) => (b.soldAt ?? "").localeCompare(a.soldAt ?? ""),
+    profit: (a: InventoryItem, b: InventoryItem) =>
+      (b.figures.profitCents ?? b.figures.expectedProfitCents ?? -Infinity) -
+      (a.figures.profitCents ?? a.figures.expectedProfitCents ?? -Infinity),
+    days: (a: InventoryItem, b: InventoryItem) => b.figures.days - a.figures.days,
+    price: (a: InventoryItem, b: InventoryItem) => b.figures.investedCents - a.figures.investedCents,
+  }[q.sort];
+  filtered.sort(by);
+  const counts = Object.fromEntries(
+    STATUSES.map((s) => [s, items.filter((i) => i.status === s).length]),
+  ) as Record<Status, number>;
+  return {
+    items: filtered.slice((q.page - 1) * q.limit, q.page * q.limit),
+    total: filtered.length,
+    page: q.page,
+    limit: q.limit,
+    counts: { ...counts, all: items.length, open: items.length - counts.sold },
+  };
+}
+
+export async function getItem(db: Database, userId: string, id: string) {
+  const item = present(await itemRow(db, userId, id), today());
+  const [photos, costs] = await Promise.all([
+    all<{ id: string; position: number }>(
+      db,
+      "SELECT id,position FROM inventory_photos WHERE user_id=? AND item_id=? ORDER BY position,created_at",
+      userId,
+      id,
+    ),
+    all<{
+      id: string;
+      kind: string;
+      description: string;
+      amount_cents: number;
+      spent_at: string;
+    }>(
+      db,
+      "SELECT id,kind,description,amount_cents,spent_at FROM inventory_costs WHERE user_id=? AND item_id=? ORDER BY spent_at DESC,created_at DESC",
+      userId,
+      id,
+    ),
+  ]);
+  return {
+    ...item,
+    photos,
+    costs: costs.map((c) => ({
+      id: c.id,
+      kind: c.kind,
+      description: c.description,
+      amountCents: c.amount_cents,
+      spentAt: c.spent_at,
+    })),
+  };
+}
+
+const saleAfterPurchase = (purchasedAt: string, soldAt: string) => {
+  if (soldAt < purchasedAt)
+    throw new HttpError(422, "A data da venda não pode ser antes da compra.");
+};
+
+export async function createItem(db: Database, userId: string, input: unknown) {
+  const data = createSchema.parse(input);
+  const count = await db
+    .prepare("SELECT COUNT(*) AS n FROM inventory_items WHERE user_id=?")
+    .bind(userId)
+    .first<{ n: number }>();
+  if ((count?.n ?? 0) >= MAX_ITEMS)
+    throw new HttpError(422, "Limite de produtos atingido.");
+  if (data.sale) saleAfterPurchase(data.purchasedAt, data.sale.soldAt);
+  const id = uid(),
+    now = new Date().toISOString();
+  await db
+    .prepare(
+      `INSERT INTO inventory_items (id,user_id,name,category,brand,model,condition,identifier,notes,status,
+        purchase_price_cents,purchased_at,purchase_channel,purchase_from,asking_price_cents,
+        sale_price_cents,sale_fees_cents,sold_at,sale_channel,sold_to,version,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`,
+    )
+    .bind(
+      id,
+      userId,
+      data.name,
+      data.category,
+      data.brand,
+      data.model,
+      data.condition,
+      data.identifier,
+      data.notes,
+      data.sale ? "sold" : data.status,
+      data.purchasePriceCents,
+      data.purchasedAt,
+      data.purchaseChannel,
+      data.purchaseFrom,
+      data.askingPriceCents,
+      data.sale?.salePriceCents ?? null,
+      data.sale?.saleFeesCents ?? 0,
+      data.sale?.soldAt ?? null,
+      data.sale?.saleChannel ?? null,
+      data.sale?.soldTo ?? null,
+      now,
+      now,
+    )
+    .run();
+  return getItem(db, userId, id);
+}
+
+const COLUMN: Record<string, string> = {
+  name: "name",
+  category: "category",
+  brand: "brand",
+  model: "model",
+  condition: "condition",
+  identifier: "identifier",
+  notes: "notes",
+  status: "status",
+  purchasePriceCents: "purchase_price_cents",
+  purchasedAt: "purchased_at",
+  purchaseChannel: "purchase_channel",
+  purchaseFrom: "purchase_from",
+  askingPriceCents: "asking_price_cents",
+};
+export async function updateItem(
+  db: Database,
+  userId: string,
+  id: string,
+  input: unknown,
+) {
+  const { expectedVersion, ...changes } = updateSchema.parse(input) as Record<
+    string,
+    unknown
+  > & { expectedVersion: number };
+  const current = await itemRow(db, userId, id);
+  if (current.version !== expectedVersion)
+    throw new HttpError(
+      409,
+      "Este produto foi alterado em outra janela. Recarregue antes de editar.",
+    );
+  if (current.status === "sold" && changes.status !== undefined)
+    throw new HttpError(422, "Desfaça a venda antes de mudar a etapa.");
+  if (current.sold_at && typeof changes.purchasedAt === "string")
+    saleAfterPurchase(changes.purchasedAt, current.sold_at);
+  const keys = Object.keys(changes).filter((k) => changes[k] !== undefined);
+  if (!keys.length) return getItem(db, userId, id);
+  const result = await db
+    .prepare(
+      `UPDATE inventory_items SET ${keys.map((k) => `${COLUMN[k]}=?`).join(",")},version=version+1,updated_at=? WHERE id=? AND user_id=? AND version=?`,
+    )
+    .bind(
+      ...keys.map((k) => changes[k]),
+      new Date().toISOString(),
+      id,
+      userId,
+      expectedVersion,
+    )
+    .run();
+  if (!result.meta.changes)
+    throw new HttpError(
+      409,
+      "Este produto foi alterado em outra janela. Recarregue antes de editar.",
+    );
+  return getItem(db, userId, id);
+}
+
+export async function setStatus(
+  db: Database,
+  userId: string,
+  id: string,
+  input: unknown,
+) {
+  const { status } = z
+    .object({ status: z.enum(["in_stock", "preparing", "listed", "reserved"]) })
+    .strict()
+    .parse(input);
+  const current = await itemRow(db, userId, id);
+  if (current.status === "sold")
+    throw new HttpError(422, "Desfaça a venda antes de mudar a etapa.");
+  await db
+    .prepare(
+      "UPDATE inventory_items SET status=?,version=version+1,updated_at=? WHERE id=? AND user_id=?",
+    )
+    .bind(status, new Date().toISOString(), id, userId)
+    .run();
+  return getItem(db, userId, id);
+}
+
+export async function sellItem(
+  db: Database,
+  userId: string,
+  id: string,
+  input: unknown,
+) {
+  const sale = saleSchema.parse(input);
+  const current = await itemRow(db, userId, id);
+  saleAfterPurchase(current.purchased_at, sale.soldAt);
+  await db
+    .prepare(
+      "UPDATE inventory_items SET status='sold',sale_price_cents=?,sale_fees_cents=?,sold_at=?,sale_channel=?,sold_to=?,version=version+1,updated_at=? WHERE id=? AND user_id=?",
+    )
+    .bind(
+      sale.salePriceCents,
+      sale.saleFeesCents,
+      sale.soldAt,
+      sale.saleChannel,
+      sale.soldTo,
+      new Date().toISOString(),
+      id,
+      userId,
+    )
+    .run();
+  return getItem(db, userId, id);
+}
+
+export async function unsellItem(db: Database, userId: string, id: string) {
+  await itemRow(db, userId, id);
+  await db
+    .prepare(
+      "UPDATE inventory_items SET status='listed',sale_price_cents=NULL,sale_fees_cents=0,sold_at=NULL,sale_channel=NULL,sold_to=NULL,version=version+1,updated_at=? WHERE id=? AND user_id=?",
+    )
+    .bind(new Date().toISOString(), id, userId)
+    .run();
+  return getItem(db, userId, id);
+}
+
+export async function deleteItem(
+  db: Database,
+  userId: string,
+  id: string,
+  media?: MediaStore,
+) {
+  await itemRow(db, userId, id);
+  const keys = (
+    await all<{ object_key: string }>(
+      db,
+      "SELECT object_key FROM inventory_photos WHERE user_id=? AND item_id=?",
+      userId,
+      id,
+    )
+  ).map((r) => r.object_key);
+  // Costs and photos go explicitly: the rows must vanish even where foreign
+  // keys are off. A failed media delete leaves an orphan file, not a broken item.
+  await db.batch([
+    db
+      .prepare("DELETE FROM inventory_costs WHERE user_id=? AND item_id=?")
+      .bind(userId, id),
+    db
+      .prepare("DELETE FROM inventory_photos WHERE user_id=? AND item_id=?")
+      .bind(userId, id),
+    db
+      .prepare("DELETE FROM inventory_items WHERE user_id=? AND id=?")
+      .bind(userId, id),
+  ]);
+  if (keys.length && media) await media.delete(keys).catch(() => undefined);
+  return { deleted: true };
+}
+
+export async function addCost(
+  db: Database,
+  userId: string,
+  itemId: string,
+  input: unknown,
+) {
+  const cost = costSchema.parse(input);
+  await itemRow(db, userId, itemId);
+  const now = new Date().toISOString();
+  await db.batch([
+    db
+      .prepare(
+        "INSERT INTO inventory_costs (id,user_id,item_id,kind,description,amount_cents,spent_at,created_at) VALUES (?,?,?,?,?,?,?,?)",
+      )
+      .bind(
+        uid(),
+        userId,
+        itemId,
+        cost.kind,
+        cost.description,
+        cost.amountCents,
+        cost.spentAt,
+        now,
+      ),
+    db
+      .prepare(
+        "UPDATE inventory_items SET updated_at=? WHERE id=? AND user_id=?",
+      )
+      .bind(now, itemId, userId),
+  ]);
+  return getItem(db, userId, itemId);
+}
+
+export async function deleteCost(
+  db: Database,
+  userId: string,
+  itemId: string,
+  costId: string,
+) {
+  const result = await db
+    .prepare(
+      "DELETE FROM inventory_costs WHERE id=? AND user_id=? AND item_id=?",
+    )
+    .bind(costId, userId, itemId)
+    .run();
+  if (!result.meta.changes) throw new HttpError(404, "Custo não encontrado.");
+  return getItem(db, userId, itemId);
+}
+
+/** Detects the real image type from its first bytes; the header is not trusted. */
+export function imageType(bytes: Uint8Array) {
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)
+    return { type: "image/jpeg", ext: "jpg" };
+  if (
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  )
+    return { type: "image/png", ext: "png" };
+  if (
+    String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
+    String.fromCharCode(...bytes.slice(8, 12)) === "WEBP"
+  )
+    return { type: "image/webp", ext: "webp" };
+  return null;
+}
+async function readImage(request: Request) {
+  const reader = request.body?.getReader();
+  if (!reader) throw new HttpError(422, "Envie uma imagem.");
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.length;
+      if (size > MAX_PHOTO_BYTES) {
+        await reader.cancel();
+        throw new HttpError(413, "A foto passa de 3 MB.");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const c of chunks) {
+    bytes.set(c, offset);
+    offset += c.length;
+  }
+  return bytes;
+}
+export async function addPhoto(
+  db: Database,
+  userId: string,
+  itemId: string,
+  request: Request,
+  media?: MediaStore,
+) {
+  if (!media)
+    throw new HttpError(503, "O armazenamento de fotos não está configurado.");
+  const item = await itemRow(db, userId, itemId);
+  if (item.photo_count >= MAX_PHOTOS)
+    throw new HttpError(422, `Cada produto aceita até ${MAX_PHOTOS} fotos.`);
+  const bytes = await readImage(request);
+  const kind = imageType(bytes);
+  if (!kind) throw new HttpError(415, "Use uma foto JPG, PNG ou WebP.");
+  const id = uid();
+  const key = `brick/${userId.replace(/[^A-Za-z0-9_-]/g, "_")}/${itemId}/${id}.${kind.ext}`;
+  await media.put(key, bytes.buffer.slice(0, bytes.byteLength) as ArrayBuffer, {
+    httpMetadata: { contentType: kind.type },
+  });
+  const now = new Date().toISOString();
+  await db.batch([
+    db
+      .prepare(
+        "INSERT INTO inventory_photos (id,user_id,item_id,object_key,content_type,bytes,position,created_at) VALUES (?,?,?,?,?,?,(SELECT COALESCE(MAX(position)+1,0) FROM inventory_photos WHERE user_id=? AND item_id=?),?)",
+      )
+      .bind(id, userId, itemId, key, kind.type, bytes.byteLength, userId, itemId, now),
+    db
+      .prepare("UPDATE inventory_items SET updated_at=? WHERE id=? AND user_id=?")
+      .bind(now, itemId, userId),
+  ]);
+  return getItem(db, userId, itemId);
+}
+
+async function photoRow(db: Database, userId: string, itemId: string, photoId: string) {
+  const row = await db
+    .prepare(
+      "SELECT object_key,position FROM inventory_photos WHERE id=? AND user_id=? AND item_id=?",
+    )
+    .bind(photoId, userId, itemId)
+    .first<{ object_key: string; position: number }>();
+  if (!row) throw new HttpError(404, "Foto não encontrada.");
+  return row;
+}
+export async function deletePhoto(
+  db: Database,
+  userId: string,
+  itemId: string,
+  photoId: string,
+  media?: MediaStore,
+) {
+  const row = await photoRow(db, userId, itemId, photoId);
+  await db
+    .prepare("DELETE FROM inventory_photos WHERE id=? AND user_id=?")
+    .bind(photoId, userId)
+    .run();
+  await media?.delete(row.object_key).catch(() => undefined);
+  return getItem(db, userId, itemId);
+}
+export async function coverPhoto(
+  db: Database,
+  userId: string,
+  itemId: string,
+  photoId: string,
+) {
+  await photoRow(db, userId, itemId, photoId);
+  await db
+    .prepare(
+      "UPDATE inventory_photos SET position=(SELECT MIN(position)-1 FROM inventory_photos WHERE user_id=? AND item_id=?) WHERE id=? AND user_id=?",
+    )
+    .bind(userId, itemId, photoId, userId)
+    .run();
+  return getItem(db, userId, itemId);
+}
+export async function photoResponse(
+  db: Database,
+  userId: string,
+  photoId: string,
+  media?: MediaStore,
+) {
+  const row = await db
+    .prepare(
+      "SELECT object_key,content_type FROM inventory_photos WHERE id=? AND user_id=?",
+    )
+    .bind(photoId, userId)
+    .first<{ object_key: string; content_type: string }>();
+  const object = row && media ? await media.get(row.object_key) : null;
+  if (!row || !object) throw new HttpError(404, "Foto não encontrada.");
+  return new Response(object.body, {
+    headers: {
+      "Content-Type": row.content_type,
+      "Cache-Control": "private, max-age=31536000, immutable",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'",
+    },
+  });
+}
+
+export async function getPreferences(db: Database, userId: string) {
+  const row = await db
+    .prepare(
+      "SELECT monthly_goal_cents,stale_after_days,selected_plan FROM brick_preferences WHERE user_id=?",
+    )
+    .bind(userId)
+    .first<{
+      monthly_goal_cents: number | null;
+      stale_after_days: number;
+      selected_plan: string | null;
+    }>();
+  return {
+    monthlyGoalCents: row?.monthly_goal_cents ?? null,
+    staleAfterDays: row?.stale_after_days ?? 30,
+    selectedPlan: row?.selected_plan ?? null,
+  };
+}
+export async function savePreferences(
+  db: Database,
+  userId: string,
+  input: unknown,
+) {
+  const data = preferencesSchema.parse(input);
+  await db
+    .prepare(
+      "INSERT INTO brick_preferences (user_id,monthly_goal_cents,stale_after_days,updated_at) VALUES (?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET monthly_goal_cents=excluded.monthly_goal_cents,stale_after_days=excluded.stale_after_days,updated_at=excluded.updated_at",
+    )
+    .bind(userId, data.monthlyGoalCents, data.staleAfterDays, new Date().toISOString())
+    .run();
+  return getPreferences(db, userId);
+}
+
+export async function inventorySummary(
+  db: Database,
+  userId: string,
+  period: string | null,
+) {
+  const p = z.enum(PERIODS).default("month").parse(period ?? undefined);
+  const [rows, prefs] = await Promise.all([
+    itemRows(db, userId),
+    getPreferences(db, userId),
+  ]);
+  const t = today();
+  return summarize(
+    rows.map((r) => {
+      const i = present(r, t);
+      return {
+        id: i.id,
+        name: i.name,
+        category: i.category,
+        coverPhotoId: i.coverPhotoId,
+        status: i.status,
+        purchasePriceCents: i.purchasePriceCents,
+        costsCents: i.costsCents,
+        askingPriceCents: i.askingPriceCents,
+        salePriceCents: i.salePriceCents,
+        saleFeesCents: i.saleFeesCents,
+        purchasedAt: i.purchasedAt,
+        soldAt: i.soldAt,
+      };
+    }),
+    {
+      period: p,
+      today: t,
+      goalCents: prefs.monthlyGoalCents,
+      staleAfterDays: prefs.staleAfterDays,
+    },
+  );
+}
+
+/** Spreadsheet export: ";" and comma decimals open cleanly in Brazilian Excel. */
+export async function exportCsv(db: Database, userId: string) {
+  const t = today();
+  const items = (await itemRows(db, userId)).map((r) => present(r, t));
+  const money = (c: number | null) =>
+    c == null ? "" : (c / 100).toFixed(2).replace(".", ",");
+  const cell = (value: unknown) => {
+    let text = value == null ? "" : String(value);
+    // Formula injection guard: a cell must never start an Excel formula.
+    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+    return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const header = [
+    "Produto",
+    "Categoria",
+    "Marca",
+    "Modelo",
+    "Estado",
+    "IMEI/Série",
+    "Etapa",
+    "Data da compra",
+    "Comprado em",
+    "Valor pago",
+    "Custos extras",
+    "Total investido",
+    "Preço pedido",
+    "Data da venda",
+    "Vendido em",
+    "Valor da venda",
+    "Taxas da venda",
+    "Lucro",
+    "Margem %",
+    "Dias em estoque",
+    "Observações",
+  ];
+  const lines = items.map((i) =>
+    [
+      i.name,
+      CATEGORY_LABELS[i.category],
+      i.brand,
+      i.model,
+      CONDITION_LABELS[i.condition],
+      i.identifier,
+      STATUS_LABELS[i.status],
+      i.purchasedAt,
+      CHANNEL_LABELS[i.purchaseChannel],
+      money(i.purchasePriceCents),
+      money(i.costsCents),
+      money(i.figures.investedCents),
+      money(i.askingPriceCents),
+      i.soldAt,
+      i.saleChannel ? CHANNEL_LABELS[i.saleChannel] : "",
+      money(i.salePriceCents),
+      i.status === "sold" ? money(i.saleFeesCents) : "",
+      money(i.figures.profitCents),
+      i.figures.marginPct == null ? "" : String(i.figures.marginPct).replace(".", ","),
+      i.figures.days,
+      i.notes,
+    ]
+      .map(cell)
+      .join(";"),
+  );
+  return new Response("﻿" + [header.join(";"), ...lines].join("\r\n"), {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="estoque-${t}.csv"`,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}

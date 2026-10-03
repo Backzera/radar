@@ -593,3 +593,124 @@ export const availabilityChecks = sqliteTable(
       .where(sql`${t.status} IN ('pending','running')`),
   ],
 );
+
+// Brick SaaS: own e-mail/password accounts. Sessions store only a token hash.
+export const authCredentials = sqliteTable(
+  "auth_credentials",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .notNull()
+      .references(() => users.id),
+    email: text("email").notNull(),
+    name: text("name").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    passwordSalt: text("password_salt").notNull(),
+    iterations: integer("iterations").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [uniqueIndex("uq_auth_email").on(t.email)],
+);
+export const authSessions = sqliteTable(
+  "auth_sessions",
+  {
+    id: text("id").primaryKey().notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: text("created_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (t) => [index("idx_auth_sessions_user").on(t.userId)],
+);
+// Money is stored in cents; dates the user picks are local YYYY-MM-DD.
+export const inventoryItems = sqliteTable(
+  "inventory_items",
+  {
+    id: text("id").primaryKey().notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    name: text("name").notNull(),
+    category: text("category").notNull(),
+    brand: text("brand"),
+    model: text("model"),
+    condition: text("condition").notNull(),
+    identifier: text("identifier"),
+    notes: text("notes").notNull().default(""),
+    status: text("status").notNull(),
+    purchasePriceCents: integer("purchase_price_cents").notNull(),
+    purchasedAt: text("purchased_at").notNull(),
+    purchaseChannel: text("purchase_channel").notNull(),
+    purchaseFrom: text("purchase_from"),
+    askingPriceCents: integer("asking_price_cents"),
+    salePriceCents: integer("sale_price_cents"),
+    saleFeesCents: integer("sale_fees_cents").notNull().default(0),
+    soldAt: text("sold_at"),
+    saleChannel: text("sale_channel"),
+    soldTo: text("sold_to"),
+    version: integer("version").notNull().default(1),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    index("idx_inventory_user_status").on(t.userId, t.status, t.updatedAt),
+    index("idx_inventory_user_sold").on(t.userId, t.soldAt),
+    check(
+      "inventory_status",
+      sql`${t.status} IN ('in_stock','preparing','listed','reserved','sold')`,
+    ),
+    check(
+      "inventory_sale_consistent",
+      sql`(${t.status}='sold') = (${t.salePriceCents} IS NOT NULL AND ${t.soldAt} IS NOT NULL)`,
+    ),
+    check("inventory_purchase_nonnegative", sql`${t.purchasePriceCents}>=0`),
+  ],
+);
+export const inventoryCosts = sqliteTable(
+  "inventory_costs",
+  {
+    id: text("id").primaryKey().notNull(),
+    userId: text("user_id").notNull(),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => inventoryItems.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    description: text("description").notNull().default(""),
+    amountCents: integer("amount_cents").notNull(),
+    spentAt: text("spent_at").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    index("idx_inventory_costs_item").on(t.userId, t.itemId),
+    check("inventory_cost_positive", sql`${t.amountCents}>0`),
+  ],
+);
+export const inventoryPhotos = sqliteTable(
+  "inventory_photos",
+  {
+    id: text("id").primaryKey().notNull(),
+    userId: text("user_id").notNull(),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => inventoryItems.id, { onDelete: "cascade" }),
+    objectKey: text("object_key").notNull(),
+    contentType: text("content_type").notNull(),
+    bytes: integer("bytes").notNull(),
+    position: integer("position").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("idx_inventory_photos_item").on(t.userId, t.itemId)],
+);
+export const brickPreferences = sqliteTable("brick_preferences", {
+  userId: text("user_id")
+    .primaryKey()
+    .notNull()
+    .references(() => users.id),
+  monthlyGoalCents: integer("monthly_goal_cents"),
+  staleAfterDays: integer("stale_after_days").notNull().default(30),
+  // Plan picked on the landing page; billing reads it once a gateway exists.
+  selectedPlan: text("selected_plan"),
+  updatedAt: text("updated_at").notNull(),
+});

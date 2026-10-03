@@ -49,15 +49,11 @@ import { checkProvider, diagnostics } from "./diagnostics";
 import { pilotConfig } from "./pilot";
 import { ProviderQueryError } from "../core/provider-query";
 import { runFailureAdvice } from "../core/run-diagnostics";
-export const json = (body: unknown, status = 200) =>
-  Response.json(body, {
-    status,
-    headers: {
-      "Cache-Control": "no-store",
-      "X-Content-Type-Options": "nosniff",
-      "Referrer-Policy": "no-referrer",
-    },
-  });
+import { json } from "./respond";
+import { handleAuthRoute, sessionPrincipal } from "./auth";
+import { handleInventoryRoute, PHOTO_UPLOAD } from "./inventory-routes";
+import { getPreferences, type MediaStore } from "./inventory";
+export { json };
 const paging = (url: URL) =>
   z
     .object({
@@ -77,6 +73,7 @@ export function createHandler(
   options: {
     development?: boolean;
     provider?: (id: string) => MarketplaceProvider;
+    media?: MediaStore;
   } = {},
 ) {
   const pilot = pilotConfig(config);
@@ -121,11 +118,16 @@ export function createHandler(
             config,
           ),
         );
-      const principal = await authenticate(
-        request,
-        config,
-        options.development,
-      );
+      const publicAuth = await handleAuthRoute(db, request, path);
+      if (publicAuth) return publicAuth;
+      // The worker authenticates with its bearer token; people with a session
+      // cookie. In password mode no other identity source is accepted.
+      const principal = request.headers.has("authorization")
+        ? await authenticate(request, config, options.development)
+        : ((await sessionPrincipal(db, request, config)) ??
+          (config.AUTH_MODE === "password"
+            ? null
+            : await authenticate(request, config, options.development)));
       if (!principal)
         return json(
           {
@@ -149,25 +151,53 @@ export function createHandler(
           throw new HttpError(405, "Método não permitido.");
         if (request.headers.get("origin") !== url.origin)
           throw new HttpError(403, "Origem da requisição inválida.");
-        if (
-          request.headers.get("content-type")?.split(";")[0].trim() !==
-          "application/json"
-        )
+        const type = request.headers
+          .get("content-type")
+          ?.split(";")[0]
+          .trim();
+        if (request.method === "POST" && PHOTO_UPLOAD.test(path)) {
+          if (!["image/jpeg", "image/png", "image/webp"].includes(type ?? ""))
+            throw new HttpError(415, "Use uma foto JPG, PNG ou WebP.");
+        } else if (type !== "application/json")
           throw new HttpError(415, "Envie JSON.");
       }
-      const window = Math.floor(Date.now() / 60000),
-        rateKey = `http:${userId}:${request.method === "GET" ? "read" : "write"}`;
-      const rate = await db
-        .prepare(
-          "INSERT INTO rate_limits(key,window,count) VALUES (?,?,1) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN window=excluded.window THEN count+1 ELSE 1 END,window=excluded.window RETURNING count",
-        )
-        .bind(rateKey, window)
-        .first<{ count: number }>();
-      if ((rate?.count ?? 0) > (request.method === "GET" ? 120 : 30))
-        throw new HttpError(429, "Muitas solicitações. Aguarde um minuto.");
-      await ensureUser(db, userId);
+      // Photos are immutable and browser-cached; a grid of them must not eat
+      // the per-minute budget of real API reads.
+      if (!(request.method === "GET" && path.startsWith("media/"))) {
+        const window = Math.floor(Date.now() / 60000),
+          rateKey = `http:${userId}:${request.method === "GET" ? "read" : "write"}`;
+        const rate = await db
+          .prepare(
+            "INSERT INTO rate_limits(key,window,count) VALUES (?,?,1) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN window=excluded.window THEN count+1 ELSE 1 END,window=excluded.window RETURNING count",
+          )
+          .bind(rateKey, window)
+          .first<{ count: number }>();
+        if ((rate?.count ?? 0) > (request.method === "GET" ? 120 : 30))
+          throw new HttpError(429, "Muitas solicitações. Aguarde um minuto.");
+        await ensureUser(db, userId);
+      }
       if (path.startsWith("admin/") && !principal.admin)
         throw new HttpError(403, "Área restrita à administração.");
+      if (request.method === "GET" && path === "auth/me")
+        return json({
+          user: {
+            id: userId,
+            name: principal.name ?? null,
+            email: principal.email ?? null,
+          },
+          admin: principal.admin,
+          plan: (await getPreferences(db, userId)).selectedPlan,
+          ...authLinks(config),
+        });
+      const inventory = await handleInventoryRoute(
+        db,
+        userId,
+        request,
+        url,
+        path,
+        options.media,
+      );
+      if (inventory) return inventory;
       if (request.method === "GET") {
         if (path === "bootstrap")
           return json(

@@ -4,6 +4,8 @@ export interface Principal {
   userId: string;
   admin: boolean;
   expiresAt?: number;
+  email?: string;
+  name?: string;
 }
 export class HttpError extends Error {
   constructor(
@@ -229,6 +231,8 @@ export async function authenticate(
   };
 }
 export function authLinks(config: RuntimeConfig) {
+  if (config.AUTH_MODE === "password")
+    return { signIn: "/entrar", signOut: null };
   return config.AUTH_MODE === "platform"
     ? {
         signIn: "/signin-with-chatgpt?return_to=/",
