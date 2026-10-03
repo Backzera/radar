@@ -1,29 +1,46 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import "./radar.css";
-import "./saas.css";
+import "./app.css";
+import "./landing.css";
+import { BRAND } from "@/components/brick/brand";
 
+// The radar UI (components/saas) keeps its own stylesheets, radar.css and
+// saas.css; import them there when the radar comes back.
 export const metadata: Metadata = {
-  title: "Market Radar | Facebook Marketplace",
-  description:
-    "Oportunidades recentes de compra e revenda no Facebook Marketplace. Preços, recência e riscos explicados.",
-  other: {
-    "codex-preview": "development",
-  },
-  icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
-  },
+  title: `${BRAND.name} | ${BRAND.tagline}`,
+  description: BRAND.description,
+  icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
+};
+export const viewport: Viewport = {
+  themeColor: "#060912",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="pt-BR">
-      <body className="antialiased">{children}</body>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        {/* Root layout covers every route; this rule targets pages/_document. */}
+        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Geist:wght@400..800&family=Geist+Mono:wght@400..600&display=swap"
+        />
+      </head>
+      <body>
+        <div className="aurora" aria-hidden="true">
+          <div className="grid" />
+        </div>
+        {children}
+      </body>
     </html>
   );
 }

@@ -1,4 +1,4 @@
-import { RadarApp } from "@/components/radar-app";
+import { Landing } from "@/components/brick/landing";
 export default function Page() {
-  return <RadarApp />;
+  return <Landing />;
 }

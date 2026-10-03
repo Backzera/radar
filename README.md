@@ -1,43 +1,44 @@
-# Market Radar 2.0 RC1
+# Market Radar
 
-Radar de compra e revenda com seleção por produto, versão, publicação, região verificável e orçamento. Esta é uma versão de desenvolvimento para teste integrado, não uma homologação de produção.
+SaaS de controle de estoque e lucro para quem faz brick (compra e revenda de usados). O radar de oportunidades do Marketplace aparece como "Em breve": o código de coleta continua no projeto para uma próxima versão.
 
-## Atualizar a instalação atual
+## O que o app faz
 
-Use [ATUALIZAR_MARKET_RADAR_2_0.md](ATUALIZAR_MARKET_RADAR_2_0.md). Depois de parar os processos e copiar os arquivos por cima da source SaaS dev.1 com hotfix:
+- **Contas próprias**: cadastro e login por e-mail e senha (`AUTH_MODE=password`), sessão em cookie `HttpOnly`.
+- **Estoque**: produto com fotos, categoria, estado, IMEI/série, onde e de quem comprou, preço pedido e etapa (em estoque, em preparação, anunciado, reservado, vendido).
+- **Custos extras** por produto (conserto, peças, frete, limpeza, taxas) e **venda** com taxas, canal e comprador; dá para desfazer a venda.
+- **Contas automáticas**: total investido, lucro líquido, margem, ROI, dias em estoque e lucro esperado de quem ainda não vendeu.
+- **Painel**: lucro e faturamento do período com comparação, meta mensal, lucro por mês (12 meses), lucro por categoria, produtos parados e últimas vendas.
+- **Vendas** por período e **exportação** para planilha (CSV para Excel, separado por `;`).
+- **Landing** pública com planos (`components/brick/brand.ts` concentra nome, preços e textos dos planos).
+
+## Rotas
+
+| Rota | Conteúdo |
+|---|---|
+| `/` | Landing com recursos, planos e perguntas |
+| `/cadastro`, `/entrar` | Criar conta e entrar |
+| `/app` | Aplicativo (painel, estoque, vendas, radar em breve, conta) |
+| `/api/v1/...` | API: `auth/*`, `inventory/*`, `media/:id`, `brick/preferences` |
+
+## Rodar no seu computador
+
+Node.js >= 22.16. No `.dev.vars`, use `AUTH_MODE=password`.
 
 ```sh
 npm run dev
 ```
 
-O início local cria backup e aplica somente a migration aditiva 0006 quando necessário, antes de iniciar servidor e worker. Não sobrescreve `.dev.vars` nem remove histórico. Não execute outro worker em paralelo. Node.js >=22.16.
+O início local faz backup e aplica as migrations pendentes antes de subir o site e o worker. Em instalação nova: `npm ci`, `npm run local:init`, `npm run build`, `npm run db:migrate` e depois `npm run dev`.
 
-## Instalação nova
+As fotos ficam num bucket R2 com o binding `MEDIA` (no desenvolvimento, o Wrangler simula o bucket em `.wrangler/state`). Para produção, crie o bucket e preencha `wrangler.production.example.json`. A cobrança online ainda não foi integrada: os planos aparecem na landing e o plano escolhido fica salvo na conta.
 
-A source completa não contém banco nem credenciais. Em ambiente com dependências apropriadas e build disponível:
+## Estrutura
 
-```sh
-npm ci
-npm run local:init
-npm run build
-npm run db:migrate
-npm run dev
-```
-
-Ajuste autenticação e configuração local diretamente no arquivo privado conforme o [guia administrativo](docs/admin-guide.md). Não exponha o servidor de desenvolvimento à internet. Nunca distribua `.dev.vars`, `.wrangler` ou segredos junto à source.
-
-## O que mudou
-
-- Oportunidades com modelo/versão corretos e publicação confirmada de até sete dias; histórico separado.
-- Variações do nome preparadas automaticamente, sem lista de aliases no cadastro.
-- Ativação salva intenção durável e inicia a primeira pesquisa, com idempotência e limites de consumo.
-- Cards, detalhes e negociação em linguagem de compra e revenda, sem fórmulas internas na jornada básica.
-- Quadro persistido de negócios e resultados de compras/vendas registradas.
-- Conferência opcional de disponibilidade com reserva de orçamento e proteção para entregas incertas.
-- Frequência efetiva calculada com a capacidade diária, não apenas com o intervalo digitado.
-- Painel administrativo de aproveitamento de observações, erros e descartes.
-
-A primeira busca é autorizada por Ativar radar e buscar. Com `PILOT_MODE=true`, as seguintes continuam manuais. Coleta desligada, fonte não configurada ou cota esgotada não viram resultados fictícios. Alterar para modo periódico é uma decisão administrativa de consumo.
+- `components/brick/`: interface do SaaS (landing, login, shell, painel, estoque, vendas, conta, gráficos).
+- `core/brick.ts`: regras e contas do brick, usadas pelo servidor e pela interface.
+- `server/auth.ts`, `server/inventory.ts`, `server/inventory-routes.ts`: login, estoque e fotos.
+- Radar (desligado na interface por `FEATURES.radar` em `components/brick/brand.ts`): `providers/`, `server/worker.ts`, `server/supervisor.ts`, `components/saas/`.
 
 ## Verificação
 
@@ -49,16 +50,6 @@ npm run check:source-secrets
 npm run build
 ```
 
-Em 01/10/2026, no Windows com Node 24: 209 testes passando, TypeScript, lint e build completo passaram. A interface ativa fica em `components/saas`; os componentes da V1 e o kit de interface sem uso foram removidos. Ainda não houve validação de produção.
-
 ## Documentação
 
-- [Guia do cliente](docs/user-guide.md)
-- [Entrega, matriz e limites desta versão](docs/release-2.0.md)
-- [Checkpoint e próximos passos](docs/implementation-status.md)
-- [Guia do administrador](docs/admin-guide.md)
-- [Guia de desenvolvimento](docs/developer-guide.md)
-- [API](docs/api.md)
-- [Procedimento de produção](docs/production.md)
-
-Os documentos históricos V1.1/dev.1 descrevem suas respectivas revisões. O status atual está no relatório 2.0. Não confunda uma validação histórica com homologação da versão presente.
+Os documentos em `docs/` descrevem o radar (versões 1.1 a 2.0) e continuam valendo para quando ele for religado: [guia de desenvolvimento](docs/developer-guide.md), [API do radar](docs/api.md), [produção](docs/production.md), [status do radar](docs/implementation-status.md).

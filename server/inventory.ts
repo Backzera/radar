@@ -173,6 +173,8 @@ export const listSchema = z
     status: z.enum(["", "open", ...STATUSES]).default(""),
     category: z.enum(["", ...CATEGORIES]).default(""),
     q: z.string().max(120).default(""),
+    soldFrom: z.string().refine(isValidDate).optional(),
+    soldTo: z.string().refine(isValidDate).optional(),
     sort: z
       .enum(["recent", "purchased", "sold", "profit", "days", "price"])
       .default("recent"),
@@ -214,6 +216,8 @@ export async function listItems(db: Database, userId: string, query: unknown) {
       (!q.status ||
         (q.status === "open" ? i.status !== "sold" : i.status === q.status)) &&
       (!q.category || i.category === q.category) &&
+      (!q.soldFrom || (i.soldAt !== null && i.soldAt >= q.soldFrom)) &&
+      (!q.soldTo || (i.soldAt !== null && i.soldAt <= q.soldTo)) &&
       terms.every((term) =>
         fold(
           [i.name, i.brand, i.model, i.identifier, i.notes, CATEGORY_LABELS[i.category]]

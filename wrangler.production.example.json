@@ -1,7 +1,9 @@
 {
   "name": "market-radar",
   "compatibility_date": "2026-05-15",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "workers_dev": false,
   "d1_databases": [
     {
@@ -12,12 +14,16 @@
     }
   ],
   "vars": {
-    "AUTH_MODE": "cloudflare-access",
-    "ACCESS_ISSUER": "https://YOUR-TEAM.cloudflareaccess.com",
-    "ACCESS_AUDIENCE": "REPLACE_WITH_APPLICATION_AUDIENCE",
+    "AUTH_MODE": "password",
     "ALLOW_LOCAL_DEV_AUTH": "false",
     "COLLECTION_ENABLED": "false",
     "PILOT_MODE": "true",
     "EXTERNAL_ALERTS_ENABLED": "false"
-  }
+  },
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "market-radar-media"
+    }
+  ]
 }
