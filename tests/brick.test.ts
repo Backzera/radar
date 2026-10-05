@@ -375,3 +375,179 @@ test("preferências: meta mensal e prazo de item parado são salvos e aparecem n
   assert.equal(summary.goal.targetCents, 300000);
   assert.equal(summary.goal.achievedCents, 0);
 });
+
+test("admin: só o dono acessa; cria usuário com senha gerada que funciona no login", async () => {
+  const { call, signup } = app();
+  const owner = await signup("dono@example.test", "Dono");
+  const customer = await signup("cliente@example.test", "Cliente");
+  assert.equal((await call("admin/users", { cookie: customer })).status, 403);
+  const created = await call("admin/users", {
+    cookie: owner,
+    body: { name: "Bia Revenda", email: "Bia@Example.test", plan: "essencial" },
+  });
+  assert.equal(created.status, 201);
+  const { temporaryPassword, user } = await created.json();
+  assert.match(temporaryPassword, /^[A-Za-z2-9]{4}-[A-Za-z2-9]{4}-[A-Za-z2-9]{4}$/);
+  assert.equal(user.email, "bia@example.test");
+  const login = await call("auth/login", {
+    body: { email: "bia@example.test", password: temporaryPassword },
+  });
+  assert.equal(login.status, 200);
+  const list = await (await call("admin/users", { cookie: owner })).json();
+  assert.equal(list.totals.total, 3);
+  const bia = list.users.find((u: Json) => u.email === "bia@example.test");
+  assert.equal(bia.plan, "essencial");
+  assert.ok(bia.lastLoginAt);
+  const search = await (await call("admin/users?q=bia", { cookie: owner })).json();
+  assert.deepEqual(search.users.map((u: Json) => u.email), ["bia@example.test"]);
+});
+
+test("admin: bloquear derruba a sessão e impede o login; desbloquear devolve o acesso", async () => {
+  const { call, signup } = app();
+  const owner = await signup("dono@example.test", "Dono");
+  const customer = await signup("cliente@example.test", "Cliente");
+  const { users } = await (await call("admin/users", { cookie: owner })).json();
+  const id = users.find((u: Json) => u.email === "cliente@example.test").id;
+  const blocked = await call(`admin/users/${encodeURIComponent(id)}/status`, {
+    cookie: owner,
+    body: { status: "blocked" },
+  });
+  assert.equal(blocked.status, 200);
+  assert.equal((await call("inventory", { cookie: customer })).status, 401);
+  const denied = await call("auth/login", {
+    body: { email: "cliente@example.test", password: "senha-forte-123" },
+  });
+  assert.equal(denied.status, 403);
+  assert.match((await denied.json()).error, /bloqueado/);
+  await call(`admin/users/${encodeURIComponent(id)}/status`, { cookie: owner, body: { status: "active" } });
+  const back = await call("auth/login", {
+    body: { email: "cliente@example.test", password: "senha-forte-123" },
+  });
+  assert.equal(back.status, 200);
+});
+
+test("admin: redefinir senha troca a senha e encerra as sessões abertas", async () => {
+  const { call, signup } = app();
+  const owner = await signup("dono@example.test", "Dono");
+  const customer = await signup("cliente@example.test", "Cliente");
+  const { users } = await (await call("admin/users", { cookie: owner })).json();
+  const id = users.find((u: Json) => u.email === "cliente@example.test").id;
+  const reset = await (
+    await call(`admin/users/${encodeURIComponent(id)}/password`, { cookie: owner, body: {} })
+  ).json();
+  assert.ok(reset.temporaryPassword);
+  assert.equal((await call("inventory", { cookie: customer })).status, 401);
+  assert.equal(
+    (await call("auth/login", { body: { email: "cliente@example.test", password: "senha-forte-123" } })).status,
+    401,
+  );
+  assert.equal(
+    (await call("auth/login", { body: { email: "cliente@example.test", password: reset.temporaryPassword } })).status,
+    200,
+  );
+});
+
+test("admin: não exclui nem bloqueia a própria conta; exclusão pede o e-mail", async () => {
+  const { call, signup } = app();
+  const owner = await signup("dono@example.test", "Dono");
+  await signup("cliente@example.test", "Cliente");
+  const { users } = await (await call("admin/users", { cookie: owner })).json();
+  const self = users.find((u: Json) => u.email === "dono@example.test").id;
+  const other = users.find((u: Json) => u.email === "cliente@example.test").id;
+  assert.equal(
+    (await call(`admin/users/${encodeURIComponent(self)}`, { cookie: owner, method: "DELETE", body: { confirmEmail: "dono@example.test" } })).status,
+    422,
+  );
+  assert.equal(
+    (await call(`admin/users/${encodeURIComponent(self)}/status`, { cookie: owner, body: { status: "blocked" } })).status,
+    422,
+  );
+  assert.equal(
+    (await call(`admin/users/${encodeURIComponent(other)}`, { cookie: owner, method: "DELETE", body: { confirmEmail: "errado@example.test" } })).status,
+    422,
+  );
+});
+
+test("admin: excluir apaga produtos, custos, fotos, sessões e conta; o e-mail fica livre", async () => {
+  const { call, signup, media, db } = app();
+  const owner = await signup("dono@example.test", "Dono");
+  const customer = await signup("cliente@example.test", "Cliente");
+  const created = await (await call("inventory", { cookie: customer, body: item() })).json();
+  await call(`inventory/${created.id}/costs`, {
+    cookie: customer,
+    body: { kind: "repair", amountCents: 5000, spentAt: today },
+  });
+  await call(`inventory/${created.id}/photos`, { cookie: customer, body: PNG, type: "image/png" });
+  assert.equal(media.objects.size, 1);
+  const { users } = await (await call("admin/users", { cookie: owner })).json();
+  const id = users.find((u: Json) => u.email === "cliente@example.test").id;
+  const deleted = await call(`admin/users/${encodeURIComponent(id)}`, {
+    cookie: owner,
+    method: "DELETE",
+    body: { confirmEmail: "Cliente@example.test" },
+  });
+  assert.equal(deleted.status, 200);
+  assert.equal((await deleted.json()).photos, 1);
+  assert.equal(media.objects.size, 0);
+  assert.equal((await call("inventory", { cookie: customer })).status, 401);
+  for (const table of ["users", "accounts", "auth_credentials", "auth_sessions", "inventory_items", "inventory_costs", "inventory_photos", "brick_preferences"]) {
+    const column = table === "users" ? "id" : "user_id";
+    const row = await db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${column}=?`).bind(id).first<{ n: number }>();
+    assert.equal(row?.n, 0, table);
+  }
+  const audit = await db
+    .prepare("SELECT action,subject_id FROM audit_events WHERE action='user_deleted'")
+    .first<{ action: string; subject_id: string }>();
+  assert.equal(audit?.subject_id, id);
+  await signup("cliente@example.test", "Cliente de novo");
+});
+
+test("admin: com o cadastro fechado, só o dono cria contas", async () => {
+  const { call, signup } = app();
+  const owner = await signup("dono@example.test", "Dono");
+  assert.deepEqual(await (await call("auth/config")).json(), { signupOpen: true });
+  await call("admin/settings", { cookie: owner, body: { signupOpen: false } });
+  assert.deepEqual(await (await call("auth/config")).json(), { signupOpen: false });
+  const blocked = await call("auth/signup", {
+    body: { name: "Ana", email: "ana@example.test", password: "senha-forte-123", acceptTerms: true },
+  });
+  assert.equal(blocked.status, 403);
+  const byOwner = await call("admin/users", {
+    cookie: owner,
+    body: { name: "Ana", email: "ana@example.test", password: "senha-escolhida-1" },
+  });
+  assert.equal(byOwner.status, 201);
+  assert.equal((await byOwner.json()).temporaryPassword, null);
+});
+
+test("conta: a pessoa troca a própria senha, continua logada e os outros aparelhos saem", async () => {
+  const { call, signup } = app();
+  const first = await signup();
+  const second = (
+    await call("auth/login", { body: { email: "ana@example.test", password: "senha-forte-123" } })
+  ).headers.get("set-cookie")!.split(";")[0];
+  const wrong = await call("auth/password", {
+    cookie: first,
+    body: { currentPassword: "errada-123", newPassword: "nova-senha-456" },
+  });
+  assert.equal(wrong.status, 422);
+  const changed = await call("auth/password", {
+    cookie: first,
+    body: { currentPassword: "senha-forte-123", newPassword: "nova-senha-456" },
+  });
+  assert.equal(changed.status, 200);
+  const renewed = changed.headers.get("set-cookie")!.split(";")[0];
+  assert.equal((await call("inventory", { cookie: renewed })).status, 200);
+  assert.equal((await call("inventory", { cookie: second })).status, 401);
+  assert.equal(
+    (await call("auth/login", { body: { email: "ana@example.test", password: "nova-senha-456" } })).status,
+    200,
+  );
+});
+
+test("rota da API exporta todo método que o roteador aceita (sem isso o DELETE vira 405)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const route = readFileSync("app/api/v1/[...path]/route.ts", "utf8");
+  for (const method of ["GET", "POST", "DELETE"])
+    assert.match(route, new RegExp(`export const ${method} = handle`), method);
+});

@@ -50,9 +50,10 @@ import { pilotConfig } from "./pilot";
 import { ProviderQueryError } from "../core/provider-query";
 import { runFailureAdvice } from "../core/run-diagnostics";
 import { json } from "./respond";
-import { handleAuthRoute, sessionPrincipal } from "./auth";
+import { changeOwnPassword, handleAuthRoute, sessionPrincipal } from "./auth";
 import { handleInventoryRoute, PHOTO_UPLOAD } from "./inventory-routes";
 import { getPreferences, type MediaStore } from "./inventory";
+import { handleAdminUsersRoute } from "./admin-users";
 export { json };
 const paging = (url: URL) =>
   z
@@ -198,6 +199,19 @@ export function createHandler(
         options.media,
       );
       if (inventory) return inventory;
+      // Non-admins never get here for admin/ paths: the check above answers 403.
+      const adminUsers = await handleAdminUsersRoute(
+        db,
+        principal,
+        request,
+        url,
+        path,
+        options.media,
+      );
+      if (adminUsers) return adminUsers;
+      if (request.method === "POST" && path === "auth/password")
+        // await keeps a rejection inside this try, so it maps to its HTTP status.
+        return await changeOwnPassword(db, request, userId, await readBoundedJson(request));
       if (request.method === "GET") {
         if (path === "bootstrap")
           return json(

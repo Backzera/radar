@@ -11,6 +11,8 @@ SaaS de controle de estoque e lucro para quem faz brick (compra e revenda de usa
 - **Painel**: lucro e faturamento do período com comparação, meta mensal, lucro por mês (12 meses), lucro por categoria, produtos parados e últimas vendas.
 - **Vendas** por período e **exportação** para planilha (CSV para Excel, separado por `;`).
 - **Landing** pública com planos (`components/brick/brand.ts` concentra nome, preços e textos dos planos).
+- **Usuários** (só administradores): cadastrar com senha gerada, bloquear e liberar, redefinir senha, trocar plano, excluir com tudo que a pessoa cadastrou e abrir ou fechar o cadastro pelo site. Cada ação fica no log `audit_events`, só com ids. Quem é administrador vem de `RADAR_ADMIN_EMAILS` (e-mails separados por vírgula) no `.dev.vars` ou nas variáveis de produção.
+- **Conta**: cada pessoa troca a própria senha; os outros aparelhos conectados saem.
 
 ## Rotas
 

@@ -609,6 +609,7 @@ export const authCredentials = sqliteTable(
     iterations: integer("iterations").notNull(),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    lastLoginAt: text("last_login_at"),
   },
   (t) => [uniqueIndex("uq_auth_email").on(t.email)],
 );
@@ -712,5 +713,12 @@ export const brickPreferences = sqliteTable("brick_preferences", {
   staleAfterDays: integer("stale_after_days").notNull().default(30),
   // Plan picked on the landing page; billing reads it once a gateway exists.
   selectedPlan: text("selected_plan"),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// Owner-controlled switches, e.g. whether the public sign-up page is open.
+export const appSettings = sqliteTable("app_settings", {
+  key: text("key").primaryKey().notNull(),
+  value: text("value").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

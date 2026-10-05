@@ -56,7 +56,11 @@ export async function hashPassword(
 }
 // Verifies against a fixed dummy when the e-mail is unknown, so a missing
 // account takes as long to reject as a wrong password.
-const DUMMY = { hash: "x".repeat(43), salt: "AAAAAAAAAAAAAAAAAAAAAA", iterations: ITERATIONS };
+const DUMMY = {
+  hash: "x".repeat(43),
+  salt: "AAAAAAAAAAAAAAAAAAAAAA",
+  iterations: ITERATIONS,
+};
 async function verifyPassword(
   password: string,
   stored: { hash: string; salt: string; iterations: number } | null,
@@ -101,12 +105,18 @@ export async function sessionPrincipal(
 ): Promise<Principal | null> {
   const token = readCookie(request, SESSION_COOKIE);
   if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
+  // A blocked account loses access at once, even with a live session.
   const row = await db
     .prepare(
-      "SELECT s.user_id,s.expires_at,c.email,c.name FROM auth_sessions s JOIN auth_credentials c ON c.user_id=s.user_id WHERE s.id=? AND s.expires_at>?",
+      "SELECT s.user_id,s.expires_at,c.email,c.name FROM auth_sessions s JOIN auth_credentials c ON c.user_id=s.user_id JOIN accounts a ON a.user_id=s.user_id AND a.status='active' WHERE s.id=? AND s.expires_at>?",
     )
     .bind(await sha256(token), new Date().toISOString())
-    .first<{ user_id: string; expires_at: string; email: string; name: string }>();
+    .first<{
+      user_id: string;
+      expires_at: string;
+      email: string;
+      name: string;
+    }>();
   if (!row) return null;
   return {
     kind: "user",
@@ -137,96 +147,63 @@ async function startSession(db: Database, request: Request, userId: string) {
   };
 }
 
-async function limited(db: Database, key: string, windowMs: number, max: number) {
-  const window = Math.floor(Date.now() / windowMs);
-  const row = await db
-    .prepare(
-      "INSERT INTO rate_limits(key,window,count) VALUES (?,?,1) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN window=excluded.window THEN count+1 ELSE 1 END,window=excluded.window RETURNING count",
-    )
-    .bind(key, window)
-    .first<{ count: number }>();
-  if ((row?.count ?? 0) > max)
-    throw new HttpError(
-      429,
-      "Muitas tentativas. Aguarde alguns minutos e tente de novo.",
-    );
+/** Readable temporary password: no 0/O or 1/l/I to misread when sent by message. */
+export function generatePassword() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  const chars = [...bytes].map((b) => alphabet[b % alphabet.length]);
+  return [0, 4, 8].map((i) => chars.slice(i, i + 4).join("")).join("-");
 }
 
-const email = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .max(254)
-  .email("Informe um e-mail válido.");
-const password = z
-  .string()
-  .min(8, "A senha precisa ter pelo menos 8 caracteres.")
-  .max(128, "A senha pode ter no máximo 128 caracteres.");
-const signupSchema = z
+export async function signupOpen(db: Database) {
+  const row = await db
+    .prepare("SELECT value FROM app_settings WHERE key='signup_open'")
+    .first<{ value: string }>();
+  return row?.value !== "false";
+}
+
+export const PLAN_IDS = ["essencial", "pro"] as const;
+export const accountSchema = z
   .object({
     name: z
       .string()
       .trim()
-      .min(2, "Informe seu nome.")
+      .min(2, "Informe o nome.")
       .max(80, "Use até 80 caracteres."),
-    email,
-    password,
-    acceptTerms: z.literal(true, {
-      errorMap: () => ({ message: "Aceite os termos para continuar." }),
-    }),
-    plan: z.enum(["essencial", "pro"]).optional(),
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .max(254)
+      .email("Informe um e-mail válido."),
+    password: z
+      .string()
+      .min(8, "A senha precisa ter pelo menos 8 caracteres.")
+      .max(128, "A senha pode ter no máximo 128 caracteres."),
+    plan: z.enum(PLAN_IDS).optional(),
   })
   .strict();
-const loginSchema = z
-  .object({ email, password: z.string().min(1).max(128) })
-  .strict();
 
-/** Public routes: sign-up, sign-in, sign-out. Returns null for other paths. */
-export async function handleAuthRoute(
+/** Statements that create a password account; the caller runs them in one batch. */
+export async function accountStatements(
   db: Database,
-  request: Request,
-  path: string,
-): Promise<Response | null> {
-  if (!["auth/signup", "auth/login", "auth/logout"].includes(path)) return null;
-  if (request.method !== "POST")
-    throw new HttpError(405, "Método não permitido.");
-  if (request.headers.get("origin") !== new URL(request.url).origin)
-    throw new HttpError(403, "Origem da requisição inválida.");
-  if (
-    request.headers.get("content-type")?.split(";")[0].trim() !==
-    "application/json"
-  )
-    throw new HttpError(415, "Envie JSON.");
-  const body = await readBoundedJson(request, 4096);
-  const ip = request.headers.get("cf-connecting-ip") ?? "local";
-  if (path === "auth/logout") {
-    const token = readCookie(request, SESSION_COOKIE);
-    if (token)
-      await db
-        .prepare("DELETE FROM auth_sessions WHERE id=?")
-        .bind(await sha256(token))
-        .run();
-    return json({ signedOut: true }, 200, {
-      "Set-Cookie": sessionCookie(request, "", 0),
-    });
-  }
-  if (path === "auth/signup") {
-    await limited(db, `auth:signup:${ip}`, 3_600_000, 20);
-    const data = signupSchema.parse(body);
-    const existing = await db
-      .prepare("SELECT user_id FROM auth_credentials WHERE email=?")
-      .bind(data.email)
-      .first();
-    if (existing)
-      throw new HttpError(
-        409,
-        "Já existe uma conta com este e-mail. Entre ou use outro e-mail.",
-      );
-    const userId = `user:${uid()}`,
-      now = new Date().toISOString(),
-      secret = await hashPassword(data.password),
-      session = await startSession(db, request, userId);
-    await db.batch([
+  data: z.infer<typeof accountSchema>,
+) {
+  const existing = await db
+    .prepare("SELECT user_id FROM auth_credentials WHERE email=?")
+    .bind(data.email)
+    .first();
+  if (existing)
+    throw new HttpError(
+      409,
+      "Já existe uma conta com este e-mail. Entre ou use outro e-mail.",
+    );
+  const userId = `user:${uid()}`,
+    now = new Date().toISOString(),
+    secret = await hashPassword(data.password);
+  return {
+    userId,
+    statements: [
       db
         .prepare(
           "INSERT INTO users (id,created_at,settings,demo_seeded) VALUES (?,?,?,0)",
@@ -254,7 +231,120 @@ export async function handleAuthRoute(
           "INSERT INTO brick_preferences (user_id,selected_plan,updated_at) VALUES (?,?,?)",
         )
         .bind(userId, data.plan ?? null, now),
+    ],
+  };
+}
+
+/** New password for an existing account; every open session is closed. */
+export async function setPassword(
+  db: Database,
+  userId: string,
+  password: string,
+) {
+  const secret = await hashPassword(password);
+  return [
+    db
+      .prepare(
+        "UPDATE auth_credentials SET password_hash=?,password_salt=?,iterations=?,updated_at=? WHERE user_id=?",
+      )
+      .bind(
+        secret.hash,
+        secret.salt,
+        secret.iterations,
+        new Date().toISOString(),
+        userId,
+      ),
+    db.prepare("DELETE FROM auth_sessions WHERE user_id=?").bind(userId),
+  ];
+}
+
+async function limited(
+  db: Database,
+  key: string,
+  windowMs: number,
+  max: number,
+) {
+  const window = Math.floor(Date.now() / windowMs);
+  const row = await db
+    .prepare(
+      "INSERT INTO rate_limits(key,window,count) VALUES (?,?,1) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN window=excluded.window THEN count+1 ELSE 1 END,window=excluded.window RETURNING count",
+    )
+    .bind(key, window)
+    .first<{ count: number }>();
+  if ((row?.count ?? 0) > max)
+    throw new HttpError(
+      429,
+      "Muitas tentativas. Aguarde alguns minutos e tente de novo.",
+    );
+}
+
+const signupSchema = accountSchema
+  .extend({
+    acceptTerms: z.literal(true, {
+      errorMap: () => ({ message: "Aceite os termos para continuar." }),
+    }),
+  })
+  .strict();
+const loginSchema = z
+  .object({
+    email: accountSchema.shape.email,
+    password: z.string().min(1).max(128),
+  })
+  .strict();
+
+/** Public routes: sign-up, sign-in, sign-out, sign-up status. Null for other paths. */
+export async function handleAuthRoute(
+  db: Database,
+  request: Request,
+  path: string,
+): Promise<Response | null> {
+  if (path === "auth/config" && request.method === "GET")
+    return json({ signupOpen: await signupOpen(db) });
+  if (!["auth/signup", "auth/login", "auth/logout"].includes(path)) return null;
+  if (request.method !== "POST")
+    throw new HttpError(405, "Método não permitido.");
+  if (request.headers.get("origin") !== new URL(request.url).origin)
+    throw new HttpError(403, "Origem da requisição inválida.");
+  if (
+    request.headers.get("content-type")?.split(";")[0].trim() !==
+    "application/json"
+  )
+    throw new HttpError(415, "Envie JSON.");
+  const body = await readBoundedJson(request, 4096);
+  const ip = request.headers.get("cf-connecting-ip") ?? "local";
+  if (path === "auth/logout") {
+    const token = readCookie(request, SESSION_COOKIE);
+    if (token)
+      await db
+        .prepare("DELETE FROM auth_sessions WHERE id=?")
+        .bind(await sha256(token))
+        .run();
+    return json({ signedOut: true }, 200, {
+      "Set-Cookie": sessionCookie(request, "", 0),
+    });
+  }
+  if (path === "auth/signup") {
+    if (!(await signupOpen(db)))
+      throw new HttpError(
+        403,
+        "O cadastro pelo site está fechado. Fale com a gente para receber seu acesso.",
+      );
+    await limited(db, `auth:signup:${ip}`, 3_600_000, 20);
+    const data = signupSchema.parse(body);
+    const account = await accountStatements(db, {
+      name: data.name,
+      email: data.email,
+      password: data.password,
+      plan: data.plan,
+    });
+    const userId = account.userId,
+      session = await startSession(db, request, userId);
+    await db.batch([
+      ...account.statements,
       session.statement,
+      db
+        .prepare("UPDATE auth_credentials SET last_login_at=? WHERE user_id=?")
+        .bind(new Date().toISOString(), userId),
     ]);
     return json(
       { user: { id: userId, name: data.name, email: data.email } },
@@ -287,18 +377,71 @@ export async function handleAuthRoute(
         }
       : null,
   );
-  if (!row || !valid)
-    throw new HttpError(401, "E-mail ou senha incorretos.");
-  const session = await startSession(db, request, row.user_id);
+  if (!row || !valid) throw new HttpError(401, "E-mail ou senha incorretos.");
+  // Only after the right password: a blocked account is not revealed to guessers.
+  const account = await db
+    .prepare("SELECT status FROM accounts WHERE user_id=?")
+    .bind(row.user_id)
+    .first<{ status: string }>();
+  if (account?.status !== "active")
+    throw new HttpError(
+      403,
+      "Seu acesso está bloqueado. Fale com o suporte para reativar.",
+    );
+  const session = await startSession(db, request, row.user_id),
+    now = new Date().toISOString();
   await db.batch([
     db
       .prepare("DELETE FROM auth_sessions WHERE user_id=? AND expires_at<=?")
-      .bind(row.user_id, new Date().toISOString()),
+      .bind(row.user_id, now),
     session.statement,
+    db
+      .prepare("UPDATE auth_credentials SET last_login_at=? WHERE user_id=?")
+      .bind(now, row.user_id),
   ]);
   return json(
     { user: { id: row.user_id, name: row.name, email: data.email } },
     200,
     { "Set-Cookie": session.cookie },
   );
+}
+
+/** The signed-in person changes their own password; other devices are signed out. */
+export async function changeOwnPassword(
+  db: Database,
+  request: Request,
+  userId: string,
+  input: unknown,
+) {
+  const data = z
+    .object({
+      currentPassword: z.string().min(1).max(128),
+      newPassword: accountSchema.shape.password,
+    })
+    .strict()
+    .parse(input);
+  await limited(db, `auth:password:${userId}`, 900_000, 10);
+  const row = await db
+    .prepare(
+      "SELECT password_hash,password_salt,iterations FROM auth_credentials WHERE user_id=?",
+    )
+    .bind(userId)
+    .first<{
+      password_hash: string;
+      password_salt: string;
+      iterations: number;
+    }>();
+  if (!row) throw new HttpError(422, "Esta conta não usa senha.");
+  const valid = await verifyPassword(data.currentPassword, {
+    hash: row.password_hash,
+    salt: row.password_salt,
+    iterations: row.iterations,
+  });
+  if (!valid) throw new HttpError(422, "A senha atual não confere.");
+  const session = await startSession(db, request, userId);
+  await db.batch([
+    ...(await setPassword(db, userId, data.newPassword)),
+    session.statement,
+  ]);
+  return json({ changed: true }, 200, { "Set-Cookie": session.cookie });
 }

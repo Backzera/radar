@@ -57,6 +57,13 @@
       "when": 1791003727493,
       "tag": "0007_brick_saas",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791008817566,
+      "tag": "0008_user_admin",
+      "breakpoints": true
     }
   ]
 }
