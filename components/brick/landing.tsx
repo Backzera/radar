@@ -19,6 +19,7 @@ import { CATEGORIES, CATEGORY_LABELS, formatCents } from "@/core/brick";
 import { Logo } from "./logo";
 import { BRAND, PLANS } from "./brand";
 import { CATEGORY_ICONS, CountUp, Reveal } from "./ui";
+import { withBase } from "./base";
 
 const FEATURES_LIST = [
   {
@@ -136,10 +137,10 @@ export function Landing() {
             <a href="#duvidas">Dúvidas</a>
           </nav>
           <div className="lp-nav-actions">
-            <a className="btn btn-ghost" href="/entrar">
+            <a className="btn btn-ghost" href={withBase("/entrar")}>
               Entrar
             </a>
-            <a className="btn btn-primary" href="/cadastro">
+            <a className="btn btn-primary" href={withBase("/cadastro")}>
               Começar agora
             </a>
           </div>
@@ -163,7 +164,7 @@ export function Landing() {
               Você vê para onde vai cada real.
             </p>
             <div className="lp-cta fade-up" style={{ "--i": 3 } as React.CSSProperties}>
-              <a className="btn btn-primary btn-lg" href="/cadastro">
+              <a className="btn btn-primary btn-lg" href={withBase("/cadastro")}>
                 Criar minha conta <ArrowRight size={18} />
               </a>
               <a className="btn btn-lg" href="#planos">
@@ -331,7 +332,7 @@ export function Landing() {
                       </li>
                     ))}
                   </ul>
-                  <a className={`btn btn-lg ${plan.highlight ? "btn-primary" : ""}`} href={`/cadastro?plano=${plan.id}`}>
+                  <a className={`btn btn-lg ${plan.highlight ? "btn-primary" : ""}`} href={withBase(`/cadastro?plano=${plan.id}`)}>
                     Começar com o {plan.name}
                   </a>
                 </article>
@@ -390,7 +391,7 @@ export function Landing() {
                 <span className="gradient-text">Veja o lucro do seu brick.</span>
               </h2>
               <p>Crie sua conta em menos de um minuto e cadastre o primeiro produto hoje.</p>
-              <a className="btn btn-primary btn-lg" href="/cadastro">
+              <a className="btn btn-primary btn-lg" href={withBase("/cadastro")}>
                 Criar minha conta <ArrowRight size={18} />
               </a>
             </div>

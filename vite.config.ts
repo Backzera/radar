@@ -1,6 +1,11 @@
 import vinext from "vinext";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 const productionTarget = process.env.RADAR_BUILD_TARGET === "production";
+// Self-hosted build (VPS): plain Node server, SQLite file and photo folder
+// instead of Workers, D1 and R2. See scripts/build-vps.mjs.
+const nodeTarget = process.env.RADAR_BUILD_TARGET === "node";
+const basePath = (process.env.BASE_PATH ?? "").replace(/\/+$/, "");
 import { defineConfig } from "vite";
 import hostingConfig from "./.openai/hosting.json";
 import { readExecutionProfile } from "./scripts/execution-profile.mjs";
@@ -38,6 +43,19 @@ const localBindingConfig = {
 };
 
 export default defineConfig(async () => {
+  const define = { __BASE_PATH__: JSON.stringify(basePath) };
+  if (nodeTarget)
+    return {
+      define,
+      resolve: {
+        alias: {
+          "cloudflare:workers": fileURLToPath(
+            new URL("./server/node-runtime/env.ts", import.meta.url),
+          ),
+        },
+      },
+      plugins: [vinext()],
+    };
   // Use Miniflare's local Request.cf placeholder unless fetching is requested.
   process.env.CLOUDFLARE_CF_FETCH_ENABLED ??= "false";
   process.env.WRANGLER_SEND_METRICS ??= "false";
@@ -53,6 +71,7 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    define,
     server: {
       ...(managedLinux
         ? { host: "0.0.0.0", allowedHosts: ["terminal.local"] }

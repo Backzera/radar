@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { withBase } from "./base";
 
 export class ApiError extends Error {
   constructor(
@@ -16,8 +17,8 @@ async function parse<T>(response: Response): Promise<T> {
     error?: string;
     fields?: { path: string; message: string }[];
   };
-  if (response.status === 401 && !location.pathname.startsWith("/entrar")) {
-    location.href = `/entrar?next=${encodeURIComponent(location.pathname + location.search)}`;
+  if (response.status === 401 && !location.pathname.startsWith(withBase("/entrar"))) {
+    location.href = `${withBase("/entrar")}?next=${encodeURIComponent(location.pathname + location.search)}`;
   }
   if (!response.ok)
     throw new ApiError(
@@ -34,7 +35,7 @@ export async function api<T>(
   init: { method?: "GET" | "POST" | "DELETE"; body?: unknown; signal?: AbortSignal } = {},
 ): Promise<T> {
   const method = init.method ?? (init.body === undefined ? "GET" : "POST");
-  const response = await fetch(`/api/v1/${path}`, {
+  const response = await fetch(withBase(`/api/v1/${path}`), {
     method,
     credentials: "same-origin",
     headers: method === "GET" ? undefined : { "Content-Type": "application/json" },
@@ -46,7 +47,7 @@ export async function api<T>(
 
 export async function uploadPhoto<T>(itemId: string, photo: Blob): Promise<T> {
   const response = await fetch(
-    `/api/v1/inventory/${encodeURIComponent(itemId)}/photos`,
+    withBase(`/api/v1/inventory/${encodeURIComponent(itemId)}/photos`),
     {
       method: "POST",
       credentials: "same-origin",

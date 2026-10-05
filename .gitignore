@@ -62,3 +62,6 @@ backups/
 
 # Configuração local do Claude Code (servidor de preview).
 /.claude/
+
+# Pacote gerado para a VPS (npm run vps:build).
+/release/

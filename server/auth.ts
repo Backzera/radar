@@ -3,8 +3,10 @@ import { z } from "zod";
 import { DEFAULT_SETTINGS } from "../core/types";
 import { uid, type Database } from "./store";
 import {
+  clientIp,
   equalSecret,
   HttpError,
+  siteOrigin,
   readBoundedJson,
   type Principal,
   type RuntimeConfig,
@@ -77,9 +79,16 @@ function readCookie(request: Request, name: string) {
   }
   return null;
 }
-function sessionCookie(request: Request, token: string, maxAge: number) {
-  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
-  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+// Scoped to the site's prefix (/brique), so other apps on the domain never get it.
+function sessionCookie(
+  request: Request,
+  config: RuntimeConfig,
+  token: string,
+  maxAge: number,
+) {
+  const secure = siteOrigin(request, config).startsWith("https:") ? "; Secure" : "";
+  const path = (config.BASE_PATH ?? "").replace(/\/+$/, "") || "/";
+  return `${SESSION_COOKIE}=${token}; Path=${path}; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
 }
 export function isAdmin(
   config: RuntimeConfig,
@@ -128,7 +137,12 @@ export async function sessionPrincipal(
   };
 }
 
-async function startSession(db: Database, request: Request, userId: string) {
+async function startSession(
+  db: Database,
+  request: Request,
+  config: RuntimeConfig,
+  userId: string,
+) {
   const token = randomToken(),
     now = new Date();
   const statement = db
@@ -143,7 +157,7 @@ async function startSession(db: Database, request: Request, userId: string) {
     );
   return {
     statement,
-    cookie: sessionCookie(request, token, SESSION_DAYS * 86_400),
+    cookie: sessionCookie(request, config, token, SESSION_DAYS * 86_400),
   };
 }
 
@@ -297,13 +311,14 @@ export async function handleAuthRoute(
   db: Database,
   request: Request,
   path: string,
+  config: RuntimeConfig = {},
 ): Promise<Response | null> {
   if (path === "auth/config" && request.method === "GET")
     return json({ signupOpen: await signupOpen(db) });
   if (!["auth/signup", "auth/login", "auth/logout"].includes(path)) return null;
   if (request.method !== "POST")
     throw new HttpError(405, "Método não permitido.");
-  if (request.headers.get("origin") !== new URL(request.url).origin)
+  if (request.headers.get("origin") !== siteOrigin(request, config))
     throw new HttpError(403, "Origem da requisição inválida.");
   if (
     request.headers.get("content-type")?.split(";")[0].trim() !==
@@ -311,7 +326,7 @@ export async function handleAuthRoute(
   )
     throw new HttpError(415, "Envie JSON.");
   const body = await readBoundedJson(request, 4096);
-  const ip = request.headers.get("cf-connecting-ip") ?? "local";
+  const ip = clientIp(request);
   if (path === "auth/logout") {
     const token = readCookie(request, SESSION_COOKIE);
     if (token)
@@ -320,7 +335,7 @@ export async function handleAuthRoute(
         .bind(await sha256(token))
         .run();
     return json({ signedOut: true }, 200, {
-      "Set-Cookie": sessionCookie(request, "", 0),
+      "Set-Cookie": sessionCookie(request, config, "", 0),
     });
   }
   if (path === "auth/signup") {
@@ -338,7 +353,7 @@ export async function handleAuthRoute(
       plan: data.plan,
     });
     const userId = account.userId,
-      session = await startSession(db, request, userId);
+      session = await startSession(db, request, config, userId);
     await db.batch([
       ...account.statements,
       session.statement,
@@ -388,7 +403,7 @@ export async function handleAuthRoute(
       403,
       "Seu acesso está bloqueado. Fale com o suporte para reativar.",
     );
-  const session = await startSession(db, request, row.user_id),
+  const session = await startSession(db, request, config, row.user_id),
     now = new Date().toISOString();
   await db.batch([
     db
@@ -410,6 +425,7 @@ export async function handleAuthRoute(
 export async function changeOwnPassword(
   db: Database,
   request: Request,
+  config: RuntimeConfig,
   userId: string,
   input: unknown,
 ) {
@@ -438,7 +454,7 @@ export async function changeOwnPassword(
     iterations: row.iterations,
   });
   if (!valid) throw new HttpError(422, "A senha atual não confere.");
-  const session = await startSession(db, request, userId);
+  const session = await startSession(db, request, config, userId);
   await db.batch([
     ...(await setPassword(db, userId, data.newPassword)),
     session.statement,

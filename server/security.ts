@@ -230,6 +230,17 @@ export async function authenticate(
       .includes(userId),
   };
 }
+/**
+ * Public origin of the site. Behind nginx the server sees http://127.0.0.1;
+ * APP_ORIGIN (e.g. https://dz7.online) is what the browser actually uses.
+ */
+export const siteOrigin = (request: Request, config: RuntimeConfig) =>
+  config.APP_ORIGIN?.replace(/\/+$/, "") || new URL(request.url).origin;
+/** Visitor IP: Cloudflare's header first, then nginx's X-Real-IP. */
+export const clientIp = (request: Request) =>
+  request.headers.get("cf-connecting-ip") ??
+  request.headers.get("x-real-ip") ??
+  "local";
 export function authLinks(config: RuntimeConfig) {
   if (config.AUTH_MODE === "password")
     return { signIn: "/entrar", signOut: null };

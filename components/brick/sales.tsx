@@ -14,6 +14,7 @@ import { useApi } from "./api";
 import { PeriodPicker } from "./dashboard";
 import { CountUp, EmptyState, Photo } from "./ui";
 import type { ItemList } from "./types";
+import { withBase } from "./base";
 
 const short = (d: string | null) =>
   d ? new Date(`${d}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "—";
@@ -57,7 +58,7 @@ export function Sales({ version, onOpenItem }: { version: number; onOpenItem: (i
         </div>
         <div className="view-actions">
           <PeriodPicker value={period} onChange={setPeriod} />
-          <a className="btn" href="/api/v1/inventory/export.csv">
+          <a className="btn" href={withBase("/api/v1/inventory/export.csv")}>
             <Download size={16} /> Planilha
           </a>
         </div>

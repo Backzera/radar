@@ -23,6 +23,7 @@ import { RadarSoon } from "./radar-soon";
 import { Sales } from "./sales";
 import { ToastProvider, useToast } from "./ui";
 import type { ItemDetail, Me, Preferences } from "./types";
+import { withBase } from "./base";
 
 // The original radar UI, loaded only when the feature is switched on.
 const LegacyRadar = lazy(() =>
@@ -100,7 +101,7 @@ function Shell({ me }: { me: Me }) {
   }, [params, me.user.name, navigate, toast]);
   const logout = async () => {
     await api("auth/logout", { body: {} }).catch(() => undefined);
-    location.href = "/";
+    location.href = withBase("/");
   };
   const newItem = () => setEditor({ item: null });
   const staleAfterDays = prefs.data?.staleAfterDays ?? 30;

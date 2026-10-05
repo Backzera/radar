@@ -36,6 +36,7 @@ import {
   type Category,
   type Status,
 } from "@/core/brick";
+import { withBase } from "./base";
 
 export const CATEGORY_ICONS: Record<Category, LucideIcon> = {
   phones: Smartphone,
@@ -245,7 +246,7 @@ export function Photo({
       {id && state !== "error" ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={`/api/v1/media/${encodeURIComponent(id)}`}
+          src={withBase(`/api/v1/media/${encodeURIComponent(id)}`)}
           alt={alt}
           loading="lazy"
           decoding="async"

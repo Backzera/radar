@@ -14,11 +14,12 @@ import { api, errorText, fieldErrors } from "./api";
 import { BRAND, PLANS, type PlanId } from "./brand";
 import { Logo } from "./logo";
 import { Field, Spinner } from "./ui";
+import { withBase } from "./base";
 
 function safeNext(value: string | null) {
   return value && value.startsWith("/") && !value.startsWith("//")
     ? value
-    : "/app";
+    : withBase("/app");
 }
 
 export function AuthPage({ mode }: { mode: "login" | "signup" }) {
@@ -32,7 +33,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   const [error, setError] = useState("");
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [next, setNext] = useState("/app");
+  const [next, setNext] = useState(withBase("/app"));
   const [closed, setClosed] = useState(false);
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -42,12 +43,12 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
       if (chosen === "essencial" || chosen === "pro") setPlan(chosen);
     });
     if (signup)
-      fetch("/api/v1/auth/config")
+      fetch(withBase("/api/v1/auth/config"))
         .then((r) => r.json() as Promise<{ signupOpen?: boolean }>)
         .then((c) => setClosed(c.signupOpen === false))
         .catch(() => undefined);
     // Already signed in: skip the form.
-    fetch("/api/v1/auth/me", { credentials: "same-origin" }).then((r) => {
+    fetch(withBase("/api/v1/auth/me"), { credentials: "same-origin" }).then((r) => {
       if (r.ok) location.replace(safeNext(params.get("next")));
     });
   }, [signup]);
@@ -66,7 +67,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
           ? { name, email, password, acceptTerms: true, plan }
           : { email, password },
       });
-      location.href = signup ? "/app?boasvindas=1" : next;
+      location.href = signup ? withBase("/app?boasvindas=1") : next;
     } catch (err) {
       setFields(fieldErrors(err));
       setError(errorText(err));
@@ -133,7 +134,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
                 O acesso ao {BRAND.name} é liberado pela nossa equipe. Fale com
                 quem te apresentou o {BRAND.name} para receber seu login.
               </p>
-              <a className="btn btn-primary btn-lg" href="/entrar">
+              <a className="btn btn-primary btn-lg" href={withBase("/entrar")}>
                 Já tenho acesso <ArrowRight size={18} />
               </a>
             </>
@@ -270,11 +271,11 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
               <p className="auth-switch">
                 {signup ? (
                   <>
-                    Já tem conta? <a href="/entrar">Entrar</a>
+                    Já tem conta? <a href={withBase("/entrar")}>Entrar</a>
                   </>
                 ) : (
                   <>
-                    Ainda não tem conta? <a href="/cadastro">Criar conta</a>
+                    Ainda não tem conta? <a href={withBase("/cadastro")}>Criar conta</a>
                   </>
                 )}
               </p>

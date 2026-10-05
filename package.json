@@ -31,7 +31,8 @@
     "benchmark": "node scripts/benchmark.cjs after",
     "probe:marketplace": "node scripts/probe-marketplace.mjs",
     "dev:server": "node scripts/run-framework.mjs dev",
-    "local:upgrade": "node scripts/upgrade-local.mjs"
+    "local:upgrade": "node scripts/upgrade-local.mjs",
+    "vps:build": "node scripts/build-vps.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",

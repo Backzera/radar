@@ -3,13 +3,14 @@ import "./globals.css";
 import "./app.css";
 import "./landing.css";
 import { BRAND } from "@/components/brick/brand";
+import { withBase } from "@/components/brick/base";
 
 // The radar UI (components/saas) keeps its own stylesheets, radar.css and
 // saas.css; import them there when the radar comes back.
 export const metadata: Metadata = {
   title: `${BRAND.name} | ${BRAND.tagline}`,
   description: BRAND.description,
-  icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
+  icons: { icon: withBase("/favicon.svg"), shortcut: withBase("/favicon.svg") },
 };
 export const viewport: Viewport = {
   themeColor: "#060912",

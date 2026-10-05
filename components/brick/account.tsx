@@ -13,6 +13,7 @@ import { PLANS } from "./brand";
 import { Field, MoneyInput, Spinner, useToast } from "./ui";
 import type { Me, Preferences } from "./types";
 import { formatCents } from "@/core/brick";
+import { withBase } from "./base";
 
 export const initials = (name: string | null, email: string | null) =>
   (name || email || "?")
@@ -193,7 +194,7 @@ export function Account({
             </div>
           </div>
           <div className="view-actions" style={{ marginTop: 20 }}>
-            <a className="btn btn-sm" href="/api/v1/inventory/export.csv">
+            <a className="btn btn-sm" href={withBase("/api/v1/inventory/export.csv")}>
               <Download size={15} /> Exportar planilha
             </a>
             {onManageUsers && (

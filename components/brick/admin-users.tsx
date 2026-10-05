@@ -15,6 +15,7 @@ import { initials } from "./account";
 import { BRAND, PLANS } from "./brand";
 import { EmptyState, Field, Modal, Spinner, useToast } from "./ui";
 import type { Me } from "./types";
+import { withBase } from "./base";
 
 interface AdminUser {
   id: string;
@@ -109,7 +110,7 @@ function CredentialsModal({
   onClose: () => void;
 }) {
   if (!credentials) return null;
-  const site = `${location.origin}/entrar`;
+  const site = `${location.origin}${withBase("/entrar")}`;
   const message = `Olá, ${credentials.name.split(" ")[0]}! Seu acesso ao ${BRAND.name} está pronto.\n\nEntre em: ${site}\nE-mail: ${credentials.email}\nSenha: ${credentials.password}\n\nDepois de entrar, troque a senha em Conta.`;
   return (
     <Modal

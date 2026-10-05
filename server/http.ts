@@ -12,6 +12,7 @@ import {
   authLinks,
   HttpError,
   readBoundedJson,
+  siteOrigin,
   type RuntimeConfig,
 } from "./security";
 import { bootstrap, sharedContract } from "./bootstrap";
@@ -96,8 +97,11 @@ export function createHandler(
       });
     });
   return async (request: Request): Promise<Response> => {
+    // Everything after /api/v1, with or without a site prefix such as /brique.
     const url = new URL(request.url),
-      path = url.pathname.replace(/^\/api\/v1\/?/, "");
+      path = url.pathname
+        .slice(url.pathname.indexOf("/api/v1") + "/api/v1".length)
+        .replace(/^\//, "");
     try {
       if (request.method === "GET" && path === "health/live")
         return json({ status: "ok" });
@@ -119,7 +123,7 @@ export function createHandler(
             config,
           ),
         );
-      const publicAuth = await handleAuthRoute(db, request, path);
+      const publicAuth = await handleAuthRoute(db, request, path, config);
       if (publicAuth) return publicAuth;
       // The worker authenticates with its bearer token; people with a session
       // cookie. In password mode no other identity source is accepted.
@@ -150,7 +154,7 @@ export function createHandler(
       if (request.method !== "GET") {
         if (!["POST", "DELETE"].includes(request.method))
           throw new HttpError(405, "Método não permitido.");
-        if (request.headers.get("origin") !== url.origin)
+        if (request.headers.get("origin") !== siteOrigin(request, config))
           throw new HttpError(403, "Origem da requisição inválida.");
         const type = request.headers
           .get("content-type")
@@ -211,7 +215,7 @@ export function createHandler(
       if (adminUsers) return adminUsers;
       if (request.method === "POST" && path === "auth/password")
         // await keeps a rejection inside this try, so it maps to its HTTP status.
-        return await changeOwnPassword(db, request, userId, await readBoundedJson(request));
+        return await changeOwnPassword(db, request, config, userId, await readBoundedJson(request));
       if (request.method === "GET") {
         if (path === "bootstrap")
           return json(

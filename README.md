@@ -35,6 +35,14 @@ O início local faz backup e aplica as migrations pendentes antes de subir o sit
 
 As fotos ficam num bucket R2 com o binding `MEDIA` (no desenvolvimento, o Wrangler simula o bucket em `.wrangler/state`). Para produção, crie o bucket e preencha `wrangler.production.example.json`. A cobrança online ainda não foi integrada: os planos aparecem na landing e o plano escolhido fica salvo na conta.
 
+## Publicar numa VPS (dz7.online/brique)
+
+```sh
+npm run vps:build
+```
+
+Gera `release/brique-vps.tar.gz`: o app como servidor Node.js (banco SQLite em arquivo e fotos em pasta, sem depender da Cloudflare para rodar), com Docker, configuração do nginx, backup e o passo a passo em [docs/deploy-vps.md](docs/deploy-vps.md). Outro endereço: `npm run vps:build -- --origin https://exemplo.com.br --base /app`.
+
 ## Estrutura
 
 - `components/brick/`: interface do SaaS (landing, login, shell, painel, estoque, vendas, conta, gráficos).

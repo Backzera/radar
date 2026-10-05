@@ -19,6 +19,7 @@ const eslintConfig = defineConfig([
     ".schema-build/**",
     ".sites-runtime/**",
     "vendor/**",
+    "release/**",
   ]),
 ]);
 
