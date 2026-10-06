@@ -1,0 +1,17 @@
+# Alternativa sem Docker: serviço systemd (veja LEIA-ME.md, "Sem Docker").
+[Unit]
+Description=Market Radar (brique)
+After=network.target
+
+[Service]
+Type=simple
+User=brique
+WorkingDirectory=/opt/brique/app
+EnvironmentFile=/opt/brique/.env
+Environment=NODE_ENV=production HOST=127.0.0.1 PORT={{PORT}} DATA_DIR=/opt/brique/data MIGRATIONS_DIR=/opt/brique/app/drizzle NODE_NO_WARNINGS=1
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

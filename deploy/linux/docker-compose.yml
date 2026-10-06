@@ -1,0 +1,12 @@
+services:
+  brique:
+    build: .
+    image: brique:latest
+    container_name: brique
+    restart: unless-stopped
+    env_file: .env
+    # Só o nginx da própria VPS acessa esta porta.
+    ports:
+      - "127.0.0.1:{{PORT}}:3000"
+    volumes:
+      - ./data:/data

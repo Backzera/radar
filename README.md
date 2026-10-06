@@ -41,7 +41,7 @@ As fotos ficam num bucket R2 com o binding `MEDIA` (no desenvolvimento, o Wrangl
 npm run vps:build
 ```
 
-Gera `release/brique-vps.tar.gz`: o app como servidor Node.js (banco SQLite em arquivo e fotos em pasta, sem depender da Cloudflare para rodar), com Docker, configuração do nginx, backup e o passo a passo em [docs/deploy-vps.md](docs/deploy-vps.md). Outro endereço: `npm run vps:build -- --origin https://exemplo.com.br --base /app`.
+Gera `release/brique-windows.zip`: o app como servidor Node.js (banco SQLite em arquivo e fotos em pasta, sem depender da Cloudflare para rodar), com os scripts de instalação como tarefa do Windows, configuração do IIS ou do Caddy, backup e o passo a passo em [docs/deploy-vps-windows.md](docs/deploy-vps-windows.md). Para VPS Linux (Docker e nginx): `npm run vps:build -- --os linux`, guia em [docs/deploy-vps-linux.md](docs/deploy-vps-linux.md). Outro endereço: `npm run vps:build -- --origin https://exemplo.com.br --base /app`.
 
 ## Estrutura
 

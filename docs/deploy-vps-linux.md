@@ -40,15 +40,15 @@ apt install -y nginx
 No seu computador, na pasta do projeto (o arquivo fica em `release/`):
 
 ```bash
-scp release/brique-vps.tar.gz root@IP-DA-VPS:/opt/
+scp release/brique-linux.tar.gz root@IP-DA-VPS:/opt/
 ```
 
 Na VPS:
 
 ```bash
 cd /opt
-tar -xzf brique-vps.tar.gz
-mv brique-vps brique
+tar -xzf brique-linux.tar.gz
+mv brique-linux brique
 cd /opt/brique
 bash install.sh
 ```
@@ -105,12 +105,12 @@ nginx -t && systemctl reload nginx
 
 ## Atualizar para uma versão nova
 
-No computador, gere o pacote novo (`npm run vps:build`) e envie. Na VPS:
+No computador, gere o pacote novo (`npm run vps:build -- --os linux`) e envie. Na VPS:
 
 ```bash
-cd /opt && rm -rf brique-vps && tar -xzf brique-vps.tar.gz
+cd /opt && rm -rf brique-linux && tar -xzf brique-linux.tar.gz
 cd /opt/brique && bash backup.sh
-rm -rf app && cp -r /opt/brique-vps/app . && cp /opt/brique-vps/{Dockerfile,docker-compose.yml,install.sh,backup.sh,LEIA-ME.md} .
+rm -rf app && cp -r /opt/brique-linux/app . && cp /opt/brique-linux/{Dockerfile,docker-compose.yml,install.sh,backup.sh,LEIA-ME.md} .
 bash install.sh
 ```
 
@@ -162,7 +162,7 @@ docker compose ps                    # situação e health check
 | Erro 525/526 na Cloudflare | Modo **Full (strict)** sem o Certificado de Origem instalado no nginx. Volte para Flexible ou instale o certificado |
 | Erro ao enviar foto (413) | Faltou o `client_max_body_size` no bloco do nginx |
 | Página sem estilo ou 404 em `/brique/_next/...` | O bloco do nginx não está pegando `/brique`: confira o `location ^~ /brique` |
-| Mudou o `BASE_PATH` e quebrou | O prefixo é definido no build: gere o pacote de novo com `npm run vps:build -- --base /novo` |
+| Mudou o `BASE_PATH` e quebrou | O prefixo é definido no build: gere o pacote de novo com `npm run vps:build -- --os linux --base /novo` |
 
 ## Segurança
 

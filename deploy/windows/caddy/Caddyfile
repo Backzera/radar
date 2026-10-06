@@ -1,0 +1,27 @@
+# Caddy na frente do Market Radar (LEIA-ME.md, "Opção B").
+# Copie para C:\caddy\Caddyfile. A Cloudflare faz o https com o visitante.
+
+(brique) {
+	request_body {
+		max_size 8MB
+	}
+	handle {{BASE}}* {
+		reverse_proxy 127.0.0.1:{{PORT}}
+	}
+	# A raiz do domínio leva para o app enquanto não houver outro site nela.
+	handle {
+		redir {{BASE}} 302
+	}
+}
+
+# Cloudflare no modo "Flexible": ela fala com a VPS pela porta 80.
+http://{{HOST}}, http://www.{{HOST}} {
+	import brique
+}
+
+# Cloudflare no modo "Full (strict)": salve o Certificado de Origem em C:\caddy\certs
+# e descomente as 4 linhas abaixo.
+# {{HOST}}, www.{{HOST}} {
+# 	tls C:/caddy/certs/{{HOST}}.pem C:/caddy/certs/{{HOST}}.key
+# 	import brique
+# }
