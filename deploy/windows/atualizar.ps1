@@ -42,6 +42,7 @@ foreach ($pasta in "caddy", "iis") {
     $origem = Join-Path $Pacote $pasta
     if (Test-Path $origem) { Copy-Item $origem $Raiz -Recurse -Force }
 }
+Ajustar-Porta-Iis
 Aplicar-Permissoes
 if ($temporaria) { Remove-Item $temporaria -Recurse -Force -ErrorAction SilentlyContinue }
 

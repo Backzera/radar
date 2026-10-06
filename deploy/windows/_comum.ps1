@@ -1,7 +1,23 @@
 # Funções usadas pelos outros scripts. Não precisa rodar este arquivo.
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"   # sem a barra de progresso os downloads ficam bem mais rápidos
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
 $Raiz = $PSScriptRoot
 $NomeTarefa = "Market Radar (brique)"
+$NodePortatil = Join-Path $Raiz "node\node.exe"
+
+function Passo([string]$Texto) { Write-Host ""; Write-Host "==> $Texto" -ForegroundColor Cyan }
+
+function Baixar([string]$Url, [string]$Arquivo) {
+    New-Item -ItemType Directory -Force (Split-Path $Arquivo) | Out-Null
+    for ($tentativa = 1; $tentativa -le 3; $tentativa++) {
+        try { Invoke-WebRequest $Url -OutFile $Arquivo -UseBasicParsing; return }
+        catch {
+            if ($tentativa -eq 3) { throw "Não consegui baixar $Url ($($_.Exception.Message))" }
+            Start-Sleep -Seconds 5
+        }
+    }
+}
 
 function Ler-Env([string]$Chave, [string]$Padrao) {
     $arquivo = Join-Path $Raiz ".env"
@@ -14,6 +30,18 @@ function Ler-Env([string]$Chave, [string]$Padrao) {
         }
     }
     return $Padrao
+}
+
+# Troca (ou acrescenta) uma linha CHAVE=valor no .env, sem mexer no resto.
+function Gravar-Env([string]$Chave, [string]$Valor) {
+    $arquivo = Join-Path $Raiz ".env"
+    $linhas = [Collections.Generic.List[string]]@(Get-Content $arquivo -Encoding UTF8)
+    $achou = $false
+    for ($i = 0; $i -lt $linhas.Count; $i++) {
+        if ($linhas[$i] -match "^\s*$Chave\s*=") { $linhas[$i] = "$Chave=$Valor"; $achou = $true }
+    }
+    if (-not $achou) { $linhas.Add("$Chave=$Valor") }
+    [IO.File]::WriteAllLines($arquivo, $linhas, (New-Object Text.UTF8Encoding($false)))
 }
 $Porta = Ler-Env "PORT" "{{PORT}}"
 $Base = Ler-Env "BASE_PATH" "{{BASE}}"
@@ -33,12 +61,11 @@ function Nome-Conta([string]$Sid) {
     return ([Security.Principal.SecurityIdentifier]$Sid).Translate([Security.Principal.NTAccount]).Value
 }
 
+# O Node portátil que o instalar.ps1 baixa para node\ (ou, sem ele, o do sistema).
 function Caminho-Node {
+    if (Test-Path $NodePortatil) { return $NodePortatil }
     $node = Get-Command node -ErrorAction SilentlyContinue
-    if (-not $node) {
-        Write-Host "Node.js não encontrado. Instale o Node.js 24 LTS (nodejs.org, instalador .msi) e abra um PowerShell novo." -ForegroundColor Yellow
-        exit 1
-    }
+    if (-not $node) { throw "Node.js não encontrado. Rode o instalar.ps1, que baixa o Node para $Raiz\node." }
     return $node.Source
 }
 
@@ -57,6 +84,15 @@ function Aplicar-Permissoes {
     if (Test-Path $envArquivo) {
         Executar-Icacls $envArquivo /inheritance:r /grant:r "*S-1-5-32-544:F" "*S-1-5-18:F" "*S-1-5-19:R"
     }
+}
+
+# Leva a porta do .env (PORT) para o web.config da aplicação no IIS.
+function Ajustar-Porta-Iis {
+    $config = Join-Path $Raiz "iis\app\web.config"
+    if (-not (Test-Path $config)) { return }
+    $texto = [IO.File]::ReadAllText($config)
+    $novo = $texto -replace "http://127\.0\.0\.1:\d+", "http://127.0.0.1:$Porta"
+    if ($novo -ne $texto) { [IO.File]::WriteAllText($config, $novo, (New-Object Text.UTF8Encoding($false))) }
 }
 
 function Aguardar-App([int]$Segundos = 60) {
