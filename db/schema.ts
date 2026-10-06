@@ -651,6 +651,9 @@ export const inventoryItems = sqliteTable(
     soldAt: text("sold_at"),
     saleChannel: text("sale_channel"),
     soldTo: text("sold_to"),
+    // Units of the same product (e.g. 4 grills): each unit keeps its own
+    // purchase and sale, the group only ties them together.
+    groupId: text("group_id"),
     version: integer("version").notNull().default(1),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -658,6 +661,7 @@ export const inventoryItems = sqliteTable(
   (t) => [
     index("idx_inventory_user_status").on(t.userId, t.status, t.updatedAt),
     index("idx_inventory_user_sold").on(t.userId, t.soldAt),
+    index("idx_inventory_user_group").on(t.userId, t.groupId),
     check(
       "inventory_status",
       sql`${t.status} IN ('in_stock','preparing','listed','reserved','sold')`,

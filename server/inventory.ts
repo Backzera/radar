@@ -57,6 +57,7 @@ interface ItemRow {
   sold_at: string | null;
   sale_channel: (typeof CHANNELS)[number] | null;
   sold_to: string | null;
+  group_id: string | null;
   version: number;
   created_at: string;
   updated_at: string;
@@ -91,6 +92,7 @@ function present(row: ItemRow, today: string) {
     soldAt: row.sold_at,
     saleChannel: row.sale_channel,
     soldTo: row.sold_to,
+    groupId: row.group_id,
     version: row.version,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -149,9 +151,29 @@ const saleSchema = z
     soldTo: optionalText(120),
   })
   .strict();
-const createSchema = z
-  .object({ ...itemFields, sale: saleSchema.optional() })
+export const MAX_UNITS = 50;
+// One unit of a product bought in quantity: its own price and, if already sold, its own sale.
+const unitSchema = z
+  .object({ purchasePriceCents: cents, sale: saleSchema.optional() })
   .strict();
+const createSchema = z
+  .object({
+    ...itemFields,
+    sale: saleSchema.optional(),
+    units: z.array(unitSchema).min(2).max(MAX_UNITS).optional(),
+  })
+  .strict();
+const addUnitsSchema = z
+  .object({
+    units: z.array(unitSchema).min(1).max(MAX_UNITS),
+    purchasedAt: date.optional(),
+  })
+  .strict();
+const joinSchema = z
+  .object({ ids: z.array(z.string().min(1).max(80)).min(1).max(MAX_UNITS) })
+  .strict();
+// They describe the product, so every unit of a group keeps the same values.
+const SHARED_FIELDS = ["name", "category", "brand", "model"] as const;
 const updateSchema = z
   .object({
     ...Object.fromEntries(
@@ -180,6 +202,8 @@ export const listSchema = z
       .default("recent"),
     page: z.coerce.number().int().min(1).max(10000).default(1),
     limit: z.coerce.number().int().min(1).max(100).default(24),
+    /** "1": units of the same product come as one entry with the group's numbers. */
+    grouped: z.enum(["0", "1"]).default("0"),
   })
   .strict();
 const preferencesSchema = z
@@ -206,6 +230,28 @@ const fold = (s: string) =>
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase();
+const sameName = (s: string) => fold(s).replace(/\s+/g, " ").trim();
+
+/** Numbers of a product bought in quantity, from all its units. */
+export function groupFigures(units: InventoryItem[]) {
+  const sold = units.filter((u) => u.figures.profitCents !== null);
+  const open = units.filter((u) => u.figures.profitCents === null);
+  const total = (list: InventoryItem[], pick: (u: InventoryItem) => number | null) =>
+    list.reduce((t, u) => t + (pick(u) ?? 0), 0);
+  return {
+    units: units.length,
+    sold: sold.length,
+    open: open.length,
+    openInvestedCents: total(open, (u) => u.figures.investedCents),
+    investedCents: total(units, (u) => u.figures.investedCents),
+    revenueCents: total(sold, (u) => u.salePriceCents),
+    profitCents: total(sold, (u) => u.figures.profitCents),
+    expectedProfitCents: open.some((u) => u.figures.expectedProfitCents !== null)
+      ? total(open, (u) => u.figures.expectedProfitCents)
+      : null,
+  };
+}
+
 export async function listItems(db: Database, userId: string, query: unknown) {
   const q = listSchema.parse(query),
     t = today();
@@ -240,9 +286,29 @@ export async function listItems(db: Database, userId: string, query: unknown) {
   const counts = Object.fromEntries(
     STATUSES.map((s) => [s, items.filter((i) => i.status === s).length]),
   ) as Record<Status, number>;
+  // Grouped: the first matching unit stands for the product; the numbers cover every unit.
+  const groups = new Map<string, InventoryItem[]>();
+  for (const i of items)
+    if (i.groupId) groups.set(i.groupId, [...(groups.get(i.groupId) ?? []), i]);
+  const seen = new Set<string>();
+  const entries: (InventoryItem & { group: ReturnType<typeof groupFigures> | null })[] = [];
+  for (const i of filtered) {
+    const units = i.groupId ? groups.get(i.groupId)! : [];
+    if (q.grouped === "0" || units.length < 2) {
+      entries.push({ ...i, group: null });
+      continue;
+    }
+    if (seen.has(i.groupId!)) continue;
+    seen.add(i.groupId!);
+    entries.push({
+      ...i,
+      coverPhotoId: i.coverPhotoId ?? units.find((u) => u.coverPhotoId)?.coverPhotoId ?? null,
+      group: groupFigures(units),
+    });
+  }
   return {
-    items: filtered.slice((q.page - 1) * q.limit, q.page * q.limit),
-    total: filtered.length,
+    items: entries.slice((q.page - 1) * q.limit, q.page * q.limit),
+    total: entries.length,
     page: q.page,
     limit: q.limit,
     counts: { ...counts, all: items.length, open: items.length - counts.sold },
@@ -271,8 +337,53 @@ export async function getItem(db: Database, userId: string, id: string) {
       id,
     ),
   ]);
+  // The other units of the product, and same-name products still registered apart.
+  const siblings = item.groupId
+    ? (
+        await all<ItemRow>(
+          db,
+          `${ITEM_SELECT} AND i.group_id=? ORDER BY i.created_at,i.id`,
+          userId,
+          item.groupId,
+        )
+      ).map((r) => present(r, today()))
+    : [];
+  const name = sameName(item.name);
+  const similar = (
+    await all<{ id: string; name: string; status: Status; purchase_price_cents: number; group_id: string | null }>(
+      db,
+      "SELECT id,name,status,purchase_price_cents,group_id FROM inventory_items WHERE user_id=? AND id<>? AND (group_id IS NULL OR group_id<>?)",
+      userId,
+      id,
+      item.groupId ?? "",
+    )
+  )
+    .filter((r) => sameName(r.name) === name)
+    .slice(0, MAX_UNITS)
+    .map((r) => ({ id: r.id, status: r.status, purchasePriceCents: r.purchase_price_cents, groupId: r.group_id }));
   return {
     ...item,
+    group:
+      siblings.length > 1
+        ? {
+            id: item.groupId!,
+            position: siblings.findIndex((u) => u.id === item.id) + 1,
+            coverPhotoId: siblings.find((u) => u.coverPhotoId)?.coverPhotoId ?? null,
+            ...groupFigures(siblings),
+            list: siblings.map((u) => ({
+              id: u.id,
+              status: u.status,
+              purchasePriceCents: u.purchasePriceCents,
+              askingPriceCents: u.askingPriceCents,
+              salePriceCents: u.salePriceCents,
+              soldAt: u.soldAt,
+              soldTo: u.soldTo,
+              investedCents: u.figures.investedCents,
+              profitCents: u.figures.profitCents,
+            })),
+          }
+        : null,
+    similar,
     photos,
     costs: costs.map((c) => ({
       id: c.id,
@@ -289,23 +400,31 @@ const saleAfterPurchase = (purchasedAt: string, soldAt: string) => {
     throw new HttpError(422, "A data da venda não pode ser antes da compra.");
 };
 
-export async function createItem(db: Database, userId: string, input: unknown) {
-  const data = createSchema.parse(input);
+type Unit = z.infer<typeof unitSchema>;
+type ProductData = Omit<z.infer<typeof createSchema>, "units" | "sale" | "purchasePriceCents">;
+async function roomFor(db: Database, userId: string, adding: number) {
   const count = await db
     .prepare("SELECT COUNT(*) AS n FROM inventory_items WHERE user_id=?")
     .bind(userId)
     .first<{ n: number }>();
-  if ((count?.n ?? 0) >= MAX_ITEMS)
+  if ((count?.n ?? 0) + adding > MAX_ITEMS)
     throw new HttpError(422, "Limite de produtos atingido.");
-  if (data.sale) saleAfterPurchase(data.purchasedAt, data.sale.soldAt);
-  const id = uid(),
-    now = new Date().toISOString();
-  await db
+}
+function unitStatement(
+  db: Database,
+  userId: string,
+  id: string,
+  data: ProductData,
+  unit: Unit,
+  groupId: string | null,
+  createdAt: string,
+) {
+  return db
     .prepare(
       `INSERT INTO inventory_items (id,user_id,name,category,brand,model,condition,identifier,notes,status,
         purchase_price_cents,purchased_at,purchase_channel,purchase_from,asking_price_cents,
-        sale_price_cents,sale_fees_cents,sold_at,sale_channel,sold_to,version,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`,
+        sale_price_cents,sale_fees_cents,sold_at,sale_channel,sold_to,group_id,version,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`,
     )
     .bind(
       id,
@@ -317,21 +436,135 @@ export async function createItem(db: Database, userId: string, input: unknown) {
       data.condition,
       data.identifier,
       data.notes,
-      data.sale ? "sold" : data.status,
-      data.purchasePriceCents,
+      unit.sale ? "sold" : data.status,
+      unit.purchasePriceCents,
       data.purchasedAt,
       data.purchaseChannel,
       data.purchaseFrom,
       data.askingPriceCents,
-      data.sale?.salePriceCents ?? null,
-      data.sale?.saleFeesCents ?? 0,
-      data.sale?.soldAt ?? null,
-      data.sale?.saleChannel ?? null,
-      data.sale?.soldTo ?? null,
-      now,
-      now,
-    )
-    .run();
+      unit.sale?.salePriceCents ?? null,
+      unit.sale?.saleFeesCents ?? 0,
+      unit.sale?.soldAt ?? null,
+      unit.sale?.saleChannel ?? null,
+      unit.sale?.soldTo ?? null,
+      groupId,
+      createdAt,
+      createdAt,
+    );
+}
+/** Inserts the units in one transaction; they are created 1 ms apart to keep the typed order. */
+async function insertUnits(
+  db: Database,
+  userId: string,
+  data: ProductData,
+  units: Unit[],
+  groupId: string | null,
+  extra: D1PreparedStatement[] = [],
+) {
+  for (const u of units) if (u.sale) saleAfterPurchase(data.purchasedAt, u.sale.soldAt);
+  const ids = units.map(() => uid());
+  const start = Date.now();
+  await db.batch([
+    ...extra,
+    ...units.map((u, k) =>
+      unitStatement(db, userId, ids[k], data, u, groupId, new Date(start + k).toISOString()),
+    ),
+  ]);
+  return ids;
+}
+
+/** One product, or several units of it (`units`), each with its own price and sale. Returns the new ids. */
+export async function createItems(db: Database, userId: string, input: unknown) {
+  const { units: many, sale, purchasePriceCents, ...data } = createSchema.parse(input);
+  const units: Unit[] = many ?? [{ purchasePriceCents, sale }];
+  await roomFor(db, userId, units.length);
+  return insertUnits(db, userId, data, units, units.length > 1 ? uid() : null);
+}
+export async function createItem(db: Database, userId: string, input: unknown) {
+  return getItem(db, userId, (await createItems(db, userId, input))[0]);
+}
+
+/** More units of a product already registered; a single product becomes a group. */
+export async function addUnits(db: Database, userId: string, id: string, input: unknown) {
+  const { units, purchasedAt } = addUnitsSchema.parse(input);
+  const row = await itemRow(db, userId, id);
+  await roomFor(db, userId, units.length);
+  const groupId = row.group_id ?? uid();
+  const data: ProductData = {
+    name: row.name,
+    category: row.category,
+    brand: row.brand,
+    model: row.model,
+    condition: row.condition,
+    identifier: null,
+    notes: "",
+    status: row.status === "sold" ? "in_stock" : row.status,
+    purchasedAt: purchasedAt ?? row.purchased_at,
+    purchaseChannel: row.purchase_channel,
+    purchaseFrom: row.purchase_from,
+    askingPriceCents: row.asking_price_cents,
+  };
+  const ids = await insertUnits(db, userId, data, units, groupId, row.group_id
+    ? []
+    : [
+        db
+          .prepare("UPDATE inventory_items SET group_id=?,version=version+1,updated_at=? WHERE id=? AND user_id=?")
+          .bind(groupId, new Date().toISOString(), id, userId),
+      ]);
+  return {
+    item: await getItem(db, userId, id),
+    created: await Promise.all(ids.map((i) => getItem(db, userId, i))),
+  };
+}
+
+/** The same product registered apart: the chosen items become units of this one. */
+export async function joinUnits(db: Database, userId: string, id: string, input: unknown) {
+  const { ids } = joinSchema.parse(input);
+  const row = await itemRow(db, userId, id);
+  const others = [...new Set(ids)].filter((other) => other !== id);
+  type Member = Pick<ItemRow, "id" | "group_id" | "name" | "category" | "brand" | "model">;
+  const owned = others.length
+    ? await all<Member>(
+        db,
+        `SELECT id,group_id,name,category,brand,model FROM inventory_items WHERE user_id=? AND id IN (${others.map(() => "?").join(",")})`,
+        userId,
+        ...others,
+      )
+    : [];
+  if (!others.length || owned.length !== others.length)
+    throw new HttpError(404, "Produto não encontrado.");
+  // A group that already exists keeps its id and its name; loose items join it.
+  const base: Member = row.group_id ? row : (owned.find((o) => o.group_id) ?? row);
+  const groupId = base.group_id ?? uid();
+  const now = new Date().toISOString();
+  const shared = SHARED_FIELDS.map((f) => `${COLUMN[f]}=?`).join(",");
+  await db.batch(
+    [id, ...others].map((target) =>
+      db
+        .prepare(
+          `UPDATE inventory_items SET group_id=?,${shared},version=version+1,updated_at=? WHERE id=? AND user_id=?`,
+        )
+        .bind(groupId, base.name, base.category, base.brand, base.model, now, target, userId),
+    ),
+  );
+  return getItem(db, userId, id);
+}
+
+/** The unit stops being part of its group; a group left with one unit is a plain product again. */
+export async function leaveUnits(db: Database, userId: string, id: string) {
+  const row = await itemRow(db, userId, id);
+  if (!row.group_id) return getItem(db, userId, id);
+  const now = new Date().toISOString();
+  await db.batch([
+    db
+      .prepare("UPDATE inventory_items SET group_id=NULL,version=version+1,updated_at=? WHERE id=? AND user_id=?")
+      .bind(now, id, userId),
+    db
+      .prepare(
+        "UPDATE inventory_items SET group_id=NULL WHERE user_id=? AND group_id=? AND (SELECT COUNT(*) FROM inventory_items g WHERE g.user_id=? AND g.group_id=?)<2",
+      )
+      .bind(userId, row.group_id, userId, row.group_id),
+  ]);
   return getItem(db, userId, id);
 }
 
@@ -389,6 +622,15 @@ export async function updateItem(
       409,
       "Este produto foi alterado em outra janela. Recarregue antes de editar.",
     );
+  // Name, category, brand and model belong to the product: every unit follows.
+  const shared = SHARED_FIELDS.filter((k) => keys.includes(k));
+  if (current.group_id && shared.length)
+    await db
+      .prepare(
+        `UPDATE inventory_items SET ${shared.map((k) => `${COLUMN[k]}=?`).join(",")},version=version+1,updated_at=? WHERE user_id=? AND group_id=? AND id<>?`,
+      )
+      .bind(...shared.map((k) => changes[k]), new Date().toISOString(), userId, current.group_id, id)
+      .run();
   return getItem(db, userId, id);
 }
 
@@ -788,6 +1030,7 @@ export async function exportCsv(db: Database, userId: string) {
     "Preço pedido",
     "Data da venda",
     "Vendido em",
+    "Cliente",
     "Valor da venda",
     "Taxas da venda",
     "Lucro",
@@ -811,6 +1054,7 @@ export async function exportCsv(db: Database, userId: string) {
       money(i.askingPriceCents),
       i.soldAt,
       i.saleChannel ? CHANNEL_LABELS[i.saleChannel] : "",
+      i.soldTo,
       money(i.salePriceCents),
       i.status === "sold" ? money(i.saleFeesCents) : "",
       money(i.figures.profitCents),

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus, ShoppingBag, Sparkles, Tag, Trash2, Wallet } from "lucide-react";
+import { ImagePlus, Layers, ShoppingBag, Sparkles, Tag, Trash2, Wallet } from "lucide-react";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
@@ -20,6 +20,15 @@ import { api, errorText, fieldErrors, uploadPhoto } from "./api";
 import { compressPhoto } from "./media";
 import { Drawer, Field, MoneyInput, Spinner, useToast } from "./ui";
 import type { ItemDetail } from "./types";
+import {
+  QuantityInput,
+  UnitsEditor,
+  resizeUnits,
+  unitsErrors,
+  unitsPayload,
+  unitsTotals,
+  type UnitDraft,
+} from "./units";
 
 /** Best guess of category and brand from what the user typed. */
 const GUESSES: [RegExp, Category, string | null][] = [
@@ -70,8 +79,13 @@ interface Draft {
   soldAt: string;
   saleChannel: Channel;
   saleFeesCents: number | null;
+  /** How many units were bought; above 1 each unit gets its own row. */
+  quantity: number;
+  units: UnitDraft[];
 }
 const blank = (): Draft => ({
+  quantity: 1,
+  units: [],
   name: "",
   category: "phones",
   brand: "",
@@ -147,6 +161,8 @@ export function ItemForm({
       [...list, ...images.map((file) => ({ file, url: URL.createObjectURL(file) }))].slice(0, 8),
     );
   };
+  const many = !item && draft.quantity > 1;
+  const totals = many ? unitsTotals(draft.units, draft.purchasePriceCents) : null;
   const invested = (draft.purchasePriceCents ?? 0) + (item?.costsCents ?? 0);
   const result = draft.sold
     ? draft.salePriceCents === null
@@ -161,7 +177,8 @@ export function ItemForm({
     const local: Record<string, string> = {};
     if (draft.name.trim().length < 2) local.name = "Dê um nome ao produto.";
     if (draft.purchasePriceCents === null) local.purchasePriceCents = "Informe quanto pagou.";
-    if (draft.sold && !draft.salePriceCents) local["sale.salePriceCents"] = "Informe o valor da venda.";
+    if (!many && draft.sold && !draft.salePriceCents) local["sale.salePriceCents"] = "Informe o valor da venda.";
+    if (many) Object.assign(local, unitsErrors(draft.units));
     if (Object.keys(local).length) {
       setErrors(local);
       return;
@@ -197,7 +214,9 @@ export function ItemForm({
           body: {
             ...body,
             status: draft.status,
-            ...(draft.sold
+            ...(many
+              ? { units: unitsPayload(draft.units, draft.purchasePriceCents) }
+              : draft.sold
               ? {
                   sale: {
                     salePriceCents: draft.salePriceCents,
@@ -245,6 +264,8 @@ export function ItemForm({
               </>
             ) : item ? (
               "Salvar alterações"
+            ) : many ? (
+              `Cadastrar ${draft.quantity} unidades`
             ) : (
               "Cadastrar produto"
             )}
@@ -277,7 +298,10 @@ export function ItemForm({
             >
               <ImagePlus size={26} />
               <strong>Toque para tirar ou escolher fotos</strong>
-              <small>Até 8 fotos. Elas são comprimidas antes do envio.</small>
+              <small>
+                Até 8 fotos. Elas são comprimidas antes do envio.
+                {many ? " Valem para todas as unidades." : ""}
+              </small>
             </div>
             <input
               ref={fileInput}
@@ -405,7 +429,22 @@ export function ItemForm({
             <ShoppingBag size={15} /> Compra
           </h3>
           <div className="form-grid">
-            <Field label="Quanto você pagou" error={errors.purchasePriceCents}>
+            {!item && (
+              <Field label="Quantidade" hint="Comprou mais de um igual? Cada unidade fica com o seu valor.">
+                {(id) => (
+                  <QuantityInput
+                    id={id}
+                    value={draft.quantity}
+                    onChange={(n) => setDraft((d) => ({ ...d, quantity: n, units: resizeUnits(d.units, n) }))}
+                  />
+                )}
+              </Field>
+            )}
+            <Field
+              label={many ? "Valor pago por unidade" : "Quanto você pagou"}
+              hint={many ? "Se alguma custou diferente, mude abaixo." : undefined}
+              error={errors.purchasePriceCents}
+            >
               {(id) => (
                 <MoneyInput
                   id={id}
@@ -481,7 +520,7 @@ export function ItemForm({
               </Field>
             )}
           </div>
-          {!item && (
+          {!item && !many && (
             <label className="toggle-row">
               <input type="checkbox" checked={draft.sold} onChange={(e) => set("sold", e.target.checked)} />
               <span>
@@ -490,7 +529,7 @@ export function ItemForm({
               </span>
             </label>
           )}
-          {draft.sold && (
+          {draft.sold && !many && (
             <div className="form-grid fade-in">
               <Field label="Valor da venda" error={errors["sale.salePriceCents"]}>
                 {(id) => (
@@ -523,7 +562,7 @@ export function ItemForm({
               </Field>
             </div>
           )}
-          {result !== null && (
+          {result !== null && !many && (
             <div className={`callout fade-in ${result < 0 ? "loss" : ""}`}>
               <span>
                 <Sparkles size={15} style={{ display: "inline", marginRight: 6, verticalAlign: -2 }} />
@@ -536,6 +575,49 @@ export function ItemForm({
             </div>
           )}
         </section>
+
+        {many && totals && (
+          <section className="form-section fade-in">
+            <h3>
+              <Layers size={15} /> {draft.quantity} unidades
+            </h3>
+            <p className="muted" style={{ fontSize: 13.5, marginTop: -6 }}>
+              Cada unidade tem o seu valor pago. Se alguma já foi vendida, marque e coloque o valor e o cliente
+              dessa venda; desconto é só colocar o valor que você fez.
+            </p>
+            <UnitsEditor
+              units={draft.units}
+              onChange={(units) => set("units", units)}
+              defaultPriceCents={draft.purchasePriceCents}
+              askingPriceCents={draft.askingPriceCents}
+              purchasedAt={draft.purchasedAt}
+              errors={errors}
+            />
+            <div className={`callout ${totals.profitCents < 0 ? "loss" : ""}`}>
+              <span>
+                Investido {formatCents(totals.investedCents)} em {draft.quantity} unidades
+                <br />
+                {totals.sold
+                  ? `${totals.sold} ${totals.sold === 1 ? "vendida" : "vendidas"} por ${formatCents(totals.revenueCents)} · ${draft.quantity - totals.sold} em estoque`
+                  : "Nenhuma vendida ainda"}
+              </span>
+              {totals.sold > 0 && (
+                <strong className={totals.profitCents >= 0 ? "profit-pos" : "profit-neg"}>
+                  {formatCents(totals.profitCents, { sign: true })}
+                </strong>
+              )}
+            </div>
+          </section>
+        )}
+
+        {item?.group && (
+          <div className="callout">
+            <span>
+              Esta é a unidade {item.group.position} de {item.group.units}. Nome, categoria, marca e modelo mudam em
+              todas; valores, datas e observações, só nesta.
+            </span>
+          </div>
+        )}
 
         <section className="form-section">
           <Field label="Observações" error={errors.notes}>

@@ -95,6 +95,7 @@ export function Sales({ version, onOpenItem }: { version: number; onOpenItem: (i
                 <tr>
                   <th>Produto</th>
                   <th>Data</th>
+                  <th>Cliente</th>
                   <th>Canal</th>
                   <th className="num-cell">Venda</th>
                   <th className="num-cell">Investido</th>
@@ -122,6 +123,7 @@ export function Sales({ version, onOpenItem }: { version: number; onOpenItem: (i
                       </div>
                     </td>
                     <td>{short(item.soldAt)}</td>
+                    <td>{item.soldTo || <span className="muted">—</span>}</td>
                     <td className="muted">{item.saleChannel ? CHANNEL_LABELS[item.saleChannel] : "—"}</td>
                     <td className="num-cell">{formatCents(item.salePriceCents)}</td>
                     <td className="num-cell muted">{formatCents(item.figures.investedCents)}</td>

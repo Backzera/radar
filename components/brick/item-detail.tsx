@@ -3,9 +3,12 @@ import { useEffect, useRef, useState } from "react";
 import {
   HandCoins,
   ImagePlus,
+  Layers,
+  Merge,
   Pencil,
   Plus,
   Receipt,
+  Split,
   Star,
   Trash2,
   Undo2,
@@ -29,6 +32,16 @@ import { api, errorText, fieldErrors, uploadPhoto } from "./api";
 import { compressPhoto, confetti } from "./media";
 import { Drawer, Field, Modal, MoneyInput, Photo, Spinner, StatusBadge, useToast } from "./ui";
 import type { ItemDetail } from "./types";
+import {
+  QuantityInput,
+  UnitsEditor,
+  blankUnit,
+  resizeUnits,
+  unitsErrors,
+  unitsPayload,
+  unitsTotals,
+  type UnitDraft,
+} from "./units";
 
 const dateText = (d: string | null) =>
   d ? new Date(`${d}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "—";
@@ -56,6 +69,8 @@ function SellModal({
   const button = useRef<HTMLButtonElement | null>(null);
   const invested = item.figures.investedCents;
   const profit = price === null ? null : price - (fees ?? 0) - invested;
+  const discount =
+    price !== null && item.askingPriceCents && price < item.askingPriceCents ? item.askingPriceCents - price : null;
   const submit = async () => {
     if (!price) {
       setErrors({ salePriceCents: "Informe o valor da venda." });
@@ -127,13 +142,20 @@ function SellModal({
             </select>
           )}
         </Field>
-        <Field label="Comprador" className="full" hint="Opcional, para seu controle.">
+        <Field label="Cliente" className="full" hint="Quem comprou. Opcional, para seu controle.">
           {(id) => <input id={id} className="input" value={buyer} onChange={(e) => setBuyer(e.target.value)} />}
         </Field>
       </div>
       <div className={`callout ${profit !== null && profit < 0 ? "loss" : ""}`}>
         <span>
           Investido {formatCents(invested)}
+          {discount !== null && (
+            <>
+              {" "}
+              · desconto de {formatCents(discount)} ({Math.round((discount / item.askingPriceCents!) * 100)}%) sobre o
+              preço pedido
+            </>
+          )}
           <br />
           {profit === null ? "Informe o valor para ver o lucro" : profit >= 0 ? "Lucro desta venda" : "Prejuízo desta venda"}
         </span>
@@ -199,22 +221,208 @@ function CostForm({ item, onAdded }: { item: ItemDetail; onAdded: (i: ItemDetail
   );
 }
 
+function AddUnitsModal({
+  item,
+  open,
+  onClose,
+  onAdded,
+}: {
+  item: ItemDetail;
+  open: boolean;
+  onClose: () => void;
+  onAdded: (item: ItemDetail, count: number) => void;
+}) {
+  const toast = useToast();
+  const [price, setPrice] = useState<number | null>(item.purchasePriceCents);
+  const [purchasedAt, setPurchasedAt] = useState(todayIn());
+  const [units, setUnits] = useState<UnitDraft[]>([blankUnit()]);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const totals = unitsTotals(units, price);
+  const submit = async () => {
+    const local = unitsErrors(units);
+    if (price === null) local.price = "Informe quanto pagou.";
+    setErrors(local);
+    if (Object.keys(local).length) return;
+    setBusy(true);
+    try {
+      const next = await api<ItemDetail>(`inventory/${encodeURIComponent(item.id)}/units`, {
+        body: { purchasedAt, units: unitsPayload(units, price) },
+      });
+      onAdded(next, units.length);
+    } catch (error) {
+      setErrors(fieldErrors(error));
+      toast({ tone: "error", title: "Não foi possível adicionar", description: errorText(error) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Adicionar unidades de ${item.name}`}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>
+            Cancelar
+          </button>
+          <button className="btn btn-primary" onClick={submit} disabled={busy}>
+            {busy ? <Spinner /> : <Plus size={16} />} Adicionar {units.length} {units.length === 1 ? "unidade" : "unidades"}
+          </button>
+        </>
+      }
+    >
+      <div className="form-grid">
+        <Field label="Quantas a mais">
+          {(id) => <QuantityInput id={id} value={units.length} onChange={(n) => setUnits(resizeUnits(units, n))} />}
+        </Field>
+        <Field label="Valor pago por unidade" error={errors.price}>
+          {(id) => <MoneyInput id={id} value={price} invalid={!!errors.price} onChange={setPrice} />}
+        </Field>
+        <Field label="Data da compra" className="full">
+          {(id) => (
+            <input id={id} type="date" className="input" max={todayIn()} value={purchasedAt} onChange={(e) => setPurchasedAt(e.target.value)} />
+          )}
+        </Field>
+      </div>
+      <UnitsEditor
+        units={units}
+        onChange={setUnits}
+        defaultPriceCents={price}
+        askingPriceCents={item.askingPriceCents}
+        purchasedAt={purchasedAt}
+        errors={errors}
+        startAt={(item.group?.units ?? 1) + 1}
+      />
+      <p className="muted" style={{ fontSize: 13 }}>
+        Investido {formatCents(totals.investedCents)}
+        {totals.sold ? ` · ${totals.sold} já vendida(s) por ${formatCents(totals.revenueCents)}` : ""}. Nome, categoria e
+        preço pedido vêm deste produto.
+      </p>
+    </Modal>
+  );
+}
+
+/** "Você tem 1 outro cadastro, com 4 unidades": units of one product count as one cadastro. */
+function similarText(similar: ItemDetail["similar"]) {
+  const products = new Set(similar.map((s) => s.groupId ?? s.id)).size;
+  const units = similar.length;
+  const head = `Você tem ${products} ${products === 1 ? "outro cadastro" : "outros cadastros"}`;
+  return units > products ? `${head}, com ${units} unidades no total,` : head;
+}
+
+function UnitsSection({
+  item,
+  busy,
+  onOpen,
+  onAdd,
+  onJoin,
+  onLeave,
+}: {
+  item: ItemDetail;
+  busy: boolean;
+  onOpen: (id: string) => void;
+  onAdd: () => void;
+  onJoin: () => void;
+  onLeave: () => void;
+}) {
+  const g = item.group;
+  return (
+    <section className="form-section">
+      <div className="card-head" style={{ marginBottom: 0 }}>
+        <h3 className="label" style={{ textTransform: "uppercase", letterSpacing: "0.07em" }}>
+          <Layers size={14} style={{ display: "inline", marginRight: 6, verticalAlign: -2 }} />
+          {g ? `Unidades deste produto (${g.units})` : "Unidades"}
+        </h3>
+        <button className="btn btn-ghost btn-sm" onClick={onAdd} disabled={busy}>
+          <Plus size={15} /> Adicionar unidades
+        </button>
+      </div>
+      {g ? (
+        <>
+          <p className="muted" style={{ fontSize: 13.5 }}>
+            {g.open} em estoque ({formatCents(g.openInvestedCents)} investidos) · {g.sold}{" "}
+            {g.sold === 1 ? "vendida" : "vendidas"} por {formatCents(g.revenueCents)}
+            {g.sold ? (
+              <>
+                {" "}
+                · lucro{" "}
+                <strong className={g.profitCents >= 0 ? "profit-pos" : "profit-neg"}>{formatCents(g.profitCents, { sign: true })}</strong>
+              </>
+            ) : null}
+          </p>
+          <div className="unit-table">
+            {g.list.map((u, k) => (
+              <button
+                key={u.id}
+                className="unit-line"
+                aria-current={u.id === item.id ? "true" : undefined}
+                onClick={() => u.id !== item.id && onOpen(u.id)}
+              >
+                <span className="unit-n">{k + 1}</span>
+                <span className="unit-status">
+                  <StatusBadge status={u.status} />
+                  {u.soldTo && <small>{u.soldTo}</small>}
+                </span>
+                <span className="unit-money">
+                  <small>Pago</small>
+                  {formatCents(u.purchasePriceCents)}
+                </span>
+                <span className="unit-money">
+                  <small>{u.status === "sold" ? "Vendida por" : "Pedindo"}</small>
+                  {formatCents(u.status === "sold" ? u.salePriceCents : u.askingPriceCents)}
+                </span>
+                <span className={`unit-money right ${u.profitCents === null ? "" : u.profitCents >= 0 ? "profit-pos" : "profit-neg"}`}>
+                  <small>Lucro</small>
+                  {u.profitCents === null ? "—" : formatCents(u.profitCents, { sign: true })}
+                </span>
+              </button>
+            ))}
+          </div>
+          <button className="btn btn-ghost btn-sm" style={{ justifySelf: "start" }} onClick={onLeave} disabled={busy}>
+            <Split size={15} /> Separar esta unidade das outras
+          </button>
+        </>
+      ) : (
+        <p className="muted" style={{ fontSize: 13.5 }}>
+          Comprou mais de um igual? Adicione as outras unidades: cada uma fica com o seu valor pago e a sua venda.
+        </p>
+      )}
+      {item.similar.length > 0 && (
+        <div className="callout">
+          <span>
+            {similarText(item.similar)} com o mesmo nome. São o mesmo produto?
+          </span>
+          <button className="btn btn-sm" onClick={onJoin} disabled={busy}>
+            <Merge size={15} /> Juntar como unidades
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function ItemDetailDrawer({
   id,
   onClose,
   onChanged,
   onEdit,
+  onOpen,
 }: {
   id: string | null;
   onClose: () => void;
   onChanged: () => void;
   onEdit: (item: ItemDetail) => void;
+  /** Shows another unit of the same product. */
+  onOpen: (id: string) => void;
 }) {
   const toast = useToast();
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [error, setError] = useState("");
   const [photoIndex, setPhotoIndex] = useState(0);
   const [selling, setSelling] = useState(false);
+  const [addingUnits, setAddingUnits] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [addingCost, setAddingCost] = useState(false);
   const [busy, setBusy] = useState("");
@@ -274,7 +482,7 @@ export function ItemDetailDrawer({
         open={!!id}
         onClose={onClose}
         wide
-        title={item ? "Produto" : "Carregando…"}
+        title={item ? (item.group ? `Unidade ${item.group.position} de ${item.group.units}` : "Produto") : "Carregando…"}
         subtitle={item ? `Cadastrado em ${dateText(item.createdAt.slice(0, 10))}` : undefined}
         footer={
           item ? (
@@ -313,7 +521,14 @@ export function ItemDetailDrawer({
         ) : (
           <>
             <div className="gallery fade-in">
-              <Photo key={photo?.id ?? "none"} id={photo?.id ?? null} category={item.category} alt={item.name} className="gallery-main" />
+              {/* A unit without photos shows the product's cover from another unit. */}
+              <Photo
+                key={photo?.id ?? "none"}
+                id={photo?.id ?? item.group?.coverPhotoId ?? null}
+                category={item.category}
+                alt={item.name}
+                className="gallery-main"
+              />
               <div className="gallery-strip">
                 {item.photos.map((p, i) => (
                   <button key={p.id} aria-pressed={p.id === photo?.id} aria-label={`Ver foto ${i + 1}`} onClick={() => setPhotoIndex(i)}>
@@ -463,6 +678,23 @@ export function ItemDetailDrawer({
               </div>
             </div>
 
+            <UnitsSection
+              item={item}
+              busy={!!busy}
+              onOpen={onOpen}
+              onAdd={() => setAddingUnits(true)}
+              onJoin={() =>
+                run(
+                  "join",
+                  () => api<ItemDetail>(path("/group"), { body: { ids: item.similar.map((s) => s.id) } }),
+                  "Cadastros juntados como unidades",
+                )
+              }
+              onLeave={() =>
+                run("leave", () => api<ItemDetail>(path("/group"), { method: "DELETE" }), "Unidade separada; agora é um produto à parte")
+              }
+            />
+
             <section className="form-section">
               <div className="card-head" style={{ marginBottom: 0 }}>
                 <h3 className="label" style={{ textTransform: "uppercase", letterSpacing: "0.07em" }}>
@@ -526,7 +758,7 @@ export function ItemDetailDrawer({
                     </dd>
                   </div>
                   <div>
-                    <dt>Comprador</dt>
+                    <dt>Cliente</dt>
                     <dd>{item.soldTo || "—"}</dd>
                   </div>
                 </>
@@ -541,6 +773,22 @@ export function ItemDetailDrawer({
           </>
         )}
       </Drawer>
+      {item && addingUnits && (
+        <AddUnitsModal
+          item={item}
+          open={addingUnits}
+          onClose={() => setAddingUnits(false)}
+          onAdded={(next, count) => {
+            setAddingUnits(false);
+            update(next);
+            toast({
+              tone: "success",
+              title: count === 1 ? "Unidade adicionada" : `${count} unidades adicionadas`,
+              description: `Agora são ${next.group?.units ?? count + 1} unidades deste produto.`,
+            });
+          }}
+        />
+      )}
       {item && selling && (
         <SellModal
           item={item}
@@ -585,7 +833,10 @@ export function ItemDetailDrawer({
         }
       >
         <p style={{ color: "var(--text-2)" }}>
-          {item?.name} será apagado com as fotos e os custos. Isso não pode ser desfeito.
+          {item?.group
+            ? `A unidade ${item.group.position} de ${item.name} será apagada com as fotos e os custos dela; as outras ${item.group.units - 1} continuam.`
+            : `${item?.name} será apagado com as fotos e os custos.`}{" "}
+          Isso não pode ser desfeito.
         </p>
       </Modal>
     </>

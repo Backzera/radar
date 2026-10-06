@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Boxes, ChevronLeft, ChevronRight, Clock, Plus, Search } from "lucide-react";
+import { Boxes, ChevronLeft, ChevronRight, Clock, Layers, Plus, Search } from "lucide-react";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
@@ -28,20 +28,41 @@ const SORTS = [
   ["sold", "Data da venda"],
 ] as const;
 
+type GroupFigures = NonNullable<ItemList["items"][number]["group"]>;
+
+/** A product bought in quantity: how many are left and what the sold ones made. */
+function groupFigures(g: GroupFigures) {
+  return {
+    left: { label: g.open ? "Em estoque" : "Faturou", value: g.open ? g.openInvestedCents : g.revenueCents },
+    right: g.sold
+      ? { label: g.open ? "Lucro já feito" : "Lucro", value: g.profitCents as number | null }
+      : { label: "Lucro esperado", value: g.expectedProfitCents },
+  };
+}
+
 export function ItemCard({
   item,
   staleAfterDays,
   onOpen,
   i,
 }: {
-  item: InventoryItem;
+  item: InventoryItem & { group?: GroupFigures | null };
   staleAfterDays: number;
   onOpen: () => void;
   i: number;
 }) {
   const f = item.figures;
-  const sold = item.status === "sold";
-  const profit = sold ? f.profitCents : f.expectedProfitCents;
+  const g = item.group ?? null;
+  const sold = g ? g.open === 0 : item.status === "sold";
+  const single = {
+    left: { label: sold ? "Vendido por" : "Investido", value: sold ? item.salePriceCents : f.investedCents },
+    right: {
+      label: sold ? "Lucro" : item.askingPriceCents ? "Lucro esperado" : "Preço de venda",
+      value: sold ? f.profitCents : f.expectedProfitCents,
+    },
+  };
+  const { left, right } = g ? groupFigures(g) : single;
+  const profit = right.value;
   return (
     <button
       className="card hoverable item-card fade-up"
@@ -50,7 +71,13 @@ export function ItemCard({
     >
       <Photo id={item.coverPhotoId} category={item.category} alt={item.name} />
       <div className="item-badges">
-        <StatusBadge status={item.status} />
+        {g ? (
+          <span className="badge units">
+            <Layers size={12} /> {g.units} unidades
+          </span>
+        ) : (
+          <StatusBadge status={item.status} />
+        )}
         {!sold && (
           <span className={`days-pill ${f.days >= staleAfterDays ? "stale" : ""}`}>
             <Clock size={12} /> {f.days} {f.days === 1 ? "dia" : "dias"}
@@ -61,16 +88,18 @@ export function ItemCard({
         <div>
           <h3>{item.name}</h3>
           <div className="item-meta">
-            {CATEGORY_LABELS[item.category]} · {CONDITION_LABELS[item.condition]}
+            {g
+              ? `${g.open} em estoque · ${g.sold} ${g.sold === 1 ? "vendida" : "vendidas"}`
+              : `${CATEGORY_LABELS[item.category]} · ${CONDITION_LABELS[item.condition]}`}
           </div>
         </div>
         <div className="item-figures">
           <div>
-            <small>{sold ? "Vendido por" : "Investido"}</small>
-            <strong>{formatCents(sold ? item.salePriceCents : f.investedCents)}</strong>
+            <small>{left.label}</small>
+            <strong>{formatCents(left.value)}</strong>
           </div>
           <div className="right">
-            <small>{sold ? "Lucro" : item.askingPriceCents ? "Lucro esperado" : "Preço de venda"}</small>
+            <small>{right.label}</small>
             {profit !== null ? (
               <strong className={profit >= 0 ? "profit-pos" : "profit-neg"}>
                 {formatCents(profit, { sign: true })}
@@ -111,7 +140,8 @@ export function Inventory({
     }, 250);
     return () => clearTimeout(t);
   }, [query]);
-  const params = new URLSearchParams({ status, category, q: search, sort, page: String(page), limit: "24" });
+  // Units of the same product show as one card.
+  const params = new URLSearchParams({ status, category, q: search, sort, page: String(page), limit: "24", grouped: "1" });
   const { data, loading, error, refresh } = useApi<ItemList>(`inventory?${params}`);
   useEffect(() => {
     if (version) refresh();

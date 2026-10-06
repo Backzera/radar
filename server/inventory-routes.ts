@@ -4,8 +4,9 @@ import type { Database } from "./store";
 import {
   addCost,
   addPhoto,
+  addUnits,
   coverPhoto,
-  createItem,
+  createItems,
   deleteCost,
   deleteItem,
   deletePhoto,
@@ -13,6 +14,8 @@ import {
   getItem,
   getPreferences,
   inventorySummary,
+  joinUnits,
+  leaveUnits,
   listItems,
   photoResponse,
   savePreferences,
@@ -51,6 +54,14 @@ export async function handleInventoryRoute(
     const after = await run();
     await recordActivity(db, actor, itemActivity(userId, change, before, after));
     return json(after ?? { deleted: true }, status);
+  };
+  type Item = Awaited<ReturnType<typeof getItem>>;
+  // Each new unit is its own product in the trail, with where it sits in the group.
+  const recordCreated = async (units: Item[], note: (k: number) => string) => {
+    for (const [k, unit] of units.entries()) {
+      const entry = itemActivity(userId, "create", null, unit);
+      if (entry) await recordActivity(db, actor, { ...entry, summary: entry.summary + note(k) });
+    }
   };
   if (method === "GET") {
     const photo = path.match(/^media\/([^/]+)$/);
@@ -95,8 +106,12 @@ export async function handleInventoryRoute(
     return null;
   const body = await readBoundedJson(request);
   if (method === "POST") {
-    if (path === "inventory")
-      return tracked("create", null, () => createItem(db, userId, body), 201);
+    if (path === "inventory") {
+      const ids = await createItems(db, userId, body);
+      const units = await Promise.all(ids.map((i) => getItem(db, userId, i)));
+      await recordCreated(units, (k) => (units.length > 1 ? ` · unidade ${k + 1} de ${units.length}` : ""));
+      return json(units[0], 201);
+    }
     if (path === "brick/preferences") {
       const saved = await savePreferences(db, userId, body);
       await recordActivity(db, actor, {
@@ -130,6 +145,25 @@ export async function handleInventoryRoute(
       const [itemId, photoId] = [id(m[1]), id(m[2])];
       return tracked("photo_cover", null, () => coverPhoto(db, userId, itemId, photoId));
     }
+    m = path.match(/^inventory\/([^/]+)\/(units|group)$/);
+    if (m) {
+      const itemId = id(m[1]);
+      if (m[2] === "units") {
+        const { item, created } = await addUnits(db, userId, itemId, body);
+        await recordCreated(created, () => ` · nova unidade (${item.group?.units ?? created.length + 1} no total)`);
+        return json(item, 201);
+      }
+      const item = await joinUnits(db, userId, itemId, body);
+      await recordActivity(db, actor, {
+        userId,
+        action: "item_grouped",
+        entity: "item",
+        entityId: itemId,
+        summary: `Juntou ${item.group?.units ?? 0} cadastros de ${item.name} como unidades do mesmo produto`,
+        details: { units: item.group?.list.map((u) => u.id) ?? [] },
+      });
+      return json(item);
+    }
   }
   if (method === "DELETE") {
     let m = path.match(/^inventory\/([^/]+)$/);
@@ -139,6 +173,19 @@ export async function handleInventoryRoute(
         await deleteItem(db, userId, itemId, media);
         return null;
       });
+    }
+    m = path.match(/^inventory\/([^/]+)\/group$/);
+    if (m) {
+      const itemId = id(m[1]);
+      const item = await leaveUnits(db, userId, itemId);
+      await recordActivity(db, actor, {
+        userId,
+        action: "item_ungrouped",
+        entity: "item",
+        entityId: itemId,
+        summary: `Separou uma unidade de ${item.name}; ela virou um produto à parte`,
+      });
+      return json(item);
     }
     m = path.match(/^inventory\/([^/]+)\/costs\/([^/]+)$/);
     if (m) {

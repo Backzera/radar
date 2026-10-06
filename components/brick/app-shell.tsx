@@ -257,6 +257,7 @@ function Shell({ me }: { me: Me }) {
         onClose={() => navigate({ item: null })}
         onChanged={bump}
         onEdit={(item) => setEditor({ item })}
+        onOpen={(id) => navigate({ item: id }, true)}
       />
       <ItemForm
         open={!!editor}
@@ -265,10 +266,15 @@ function Shell({ me }: { me: Me }) {
         onSaved={(item, created) => {
           setEditor(null);
           bump();
+          const units = item.group?.units ?? 1;
           toast({
             tone: "success",
-            title: created ? "Produto cadastrado!" : "Alterações salvas",
-            description: created ? "Ele já aparece no seu estoque." : undefined,
+            title: !created ? "Alterações salvas" : units > 1 ? `${units} unidades cadastradas!` : "Produto cadastrado!",
+            description: created
+              ? units > 1
+                ? "Aparecem juntas no estoque; cada uma com seu valor."
+                : "Ele já aparece no seu estoque."
+              : undefined,
           });
           if (created) openItem(item.id);
           else navigate({ item: item.id }, true);
