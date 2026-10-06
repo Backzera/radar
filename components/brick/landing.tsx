@@ -402,6 +402,10 @@ export function Landing() {
       <footer className="lp-footer">
         <div className="lp-container">
           <Logo />
+          <nav aria-label="Informações legais">
+            <a href={withBase("/termos")}>Termos de uso</a>
+            <a href={withBase("/privacidade")}>Privacidade</a>
+          </nav>
           <span>
             © {new Date().getFullYear()} {BRAND.name}. Feito para quem compra e revende usados.
           </span>

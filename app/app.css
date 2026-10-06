@@ -532,7 +532,9 @@
   text-align: left;
   cursor: pointer;
   transition: background 0.2s var(--ease);
-  width: calc(100% + 16px);
+  /* Grid items default to min-width:auto; a long nowrap name would push the value off the card. */
+  min-width: 0;
+  width: auto;
 }
 .mini-item:hover {
   background: rgba(255, 255, 255, 0.04);
@@ -560,6 +562,8 @@
   font-size: 12.5px;
 }
 .mini-item .mini-value {
+  flex: none;
+  white-space: nowrap;
   text-align: right;
   font-weight: 620;
   font-size: 14px;
@@ -2106,5 +2110,40 @@
   }
   .unit-line .unit-money {
     grid-row: 2;
+  }
+}
+
+/* Small phones (≤ 420px): two cards per row are ~150px wide, so the
+   badges stack instead of running off the card. */
+@media (max-width: 420px) {
+  .item-card .item-badges {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+  }
+  .item-card .badge,
+  .item-card .days-pill {
+    max-width: 100%;
+    font-size: 11px;
+  }
+  .item-figures strong {
+    font-size: 13.5px;
+  }
+}
+
+/* Touch: every control at least ~40px tall on phones and tablets. */
+@media (max-width: 1023px) {
+  .btn-sm {
+    min-height: 40px;
+  }
+  .segmented button {
+    height: 38px;
+  }
+  .row-actions .btn-icon {
+    width: 40px;
+    height: 40px;
   }
 }

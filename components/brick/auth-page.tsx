@@ -237,7 +237,15 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
                       onChange={(e) => setTerms(e.target.checked)}
                     />
                     <span>
-                      Li e aceito os termos de uso e a política de privacidade.
+                      Li e aceito os{" "}
+                      <a href={withBase("/termos")} target="_blank" rel="noopener" style={{ color: "var(--brand)" }}>
+                        termos de uso
+                      </a>{" "}
+                      e a{" "}
+                      <a href={withBase("/privacidade")} target="_blank" rel="noopener" style={{ color: "var(--brand)" }}>
+                        política de privacidade
+                      </a>
+                      .
                       {fields.acceptTerms && (
                         <span
                           className="error"

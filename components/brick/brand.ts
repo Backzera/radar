@@ -4,6 +4,8 @@ export const BRAND = {
   tagline: "O painel do bricker",
   description:
     "Controle de estoque e lucro para quem compra e revende usados: fotos, custos, vendas, margem e metas num só lugar.",
+  /** Shown on the terms and privacy pages; fill in before launching. */
+  supportEmail: "",
 };
 
 export const PLANS = [

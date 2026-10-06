@@ -759,3 +759,73 @@
     display: flex !important;
   }
 }
+
+/* Very small phones: the logo shrinks to its mark and the buttons stay on screen. */
+@media (max-width: 380px) {
+  .lp-nav .logo strong {
+    display: none;
+  }
+  .lp-nav .lp-container {
+    gap: 8px;
+  }
+  .lp-nav-actions {
+    gap: 4px;
+  }
+  .lp-nav-actions .btn {
+    padding: 0 10px;
+  }
+}
+
+/* Terms and privacy */
+.legal-body {
+  max-width: 760px;
+  padding: 40px 0 80px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+.legal-body h1 {
+  color: var(--text);
+  font-size: clamp(28px, 6vw, 40px);
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+.legal-body h2 {
+  color: var(--text);
+  font-size: 18px;
+  margin: 28px 0 8px;
+}
+.legal-body p,
+.legal-body ul {
+  margin: 0 0 12px;
+}
+.legal-body ul {
+  padding-left: 20px;
+}
+.legal-body li {
+  margin-bottom: 8px;
+}
+.legal-body a {
+  color: var(--brand);
+}
+.legal-links {
+  margin-top: 40px !important;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+.lp-footer nav {
+  display: flex;
+  gap: 16px;
+}
+.lp-footer nav a {
+  color: var(--text-2);
+}
+.legal-body h1 {
+  font-weight: 750;
+}
+.legal-body h2 {
+  font-weight: 650;
+}
+.legal-body ul {
+  list-style: disc;
+}
