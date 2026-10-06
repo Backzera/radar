@@ -79,6 +79,14 @@ function Executar-Icacls {
 function Aplicar-Permissoes {
     New-Item -ItemType Directory -Force $Dados | Out-Null
     Executar-Icacls $Raiz /grant "*S-1-5-19:(OI)(CI)RX"
+    # Uma pasta movida de outro lugar mantém as permissões antigas (instalações antigas
+    # moviam o Node da pasta temporária): volta a herdar da raiz. /C segue se algum
+    # arquivo falhar; o node.exe é o que precisa dar certo.
+    $pastaNode = Join-Path $Raiz "node"
+    if (Test-Path $pastaNode) {
+        & icacls $pastaNode /reset /T /C /Q | Out-Null
+        Executar-Icacls (Join-Path $pastaNode "node.exe") /reset
+    }
     Executar-Icacls $Dados /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-19:(OI)(CI)M"
     $envArquivo = Join-Path $Raiz ".env"
     if (Test-Path $envArquivo) {
@@ -143,6 +151,11 @@ function Iniciar-App {
         return $true
     }
     Write-Host "O app não respondeu em 60 segundos." -ForegroundColor Red
+    $resultado = "0x{0:X8}" -f (Get-ScheduledTaskInfo -TaskName $NomeTarefa).LastTaskResult
+    Write-Host "Resultado da tarefa: $resultado"
+    if ($resultado -eq "0x80070005") {
+        Write-Host "Acesso negado: a conta SERVIÇO LOCAL não consegue abrir o Node ou os arquivos do app. Rode o instalar.ps1 de novo, que refaz as permissões." -ForegroundColor Yellow
+    }
     Mostrar-Log
     return $false
 }

@@ -35,11 +35,16 @@ if (-not (Test-Path $NodePortatil)) {
     $zip = Join-Path $env:TEMP "$nome.zip"
     Write-Host "Baixando Node.js $($versao.version)"
     Baixar "https://nodejs.org/dist/$($versao.version)/$nome.zip" $zip
-    Expand-Archive $zip -DestinationPath $env:TEMP -Force
+    # Extrai dentro de C:\brique para herdar as permissões dela. Uma pasta movida de outro
+    # lugar (como a pasta temporária do Administrador) leva as permissões antigas junto, e
+    # o app, como SERVIÇO LOCAL, não consegue abrir o node.exe.
+    $extraindo = Join-Path $Raiz "node-baixando"
+    if (Test-Path $extraindo) { Remove-Item $extraindo -Recurse -Force }
+    Expand-Archive $zip -DestinationPath $extraindo -Force
     $pastaNode = Join-Path $Raiz "node"
     if (Test-Path $pastaNode) { Remove-Item $pastaNode -Recurse -Force }
-    Move-Item (Join-Path $env:TEMP $nome) $pastaNode
-    Remove-Item $zip -ErrorAction SilentlyContinue
+    Move-Item (Join-Path $extraindo $nome) $pastaNode
+    Remove-Item $extraindo, $zip -Recurse -Force -ErrorAction SilentlyContinue
 }
 $node = Caminho-Node
 Write-Host "Node.js $(& $node -v) em $node"

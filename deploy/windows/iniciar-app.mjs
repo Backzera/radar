@@ -5,7 +5,7 @@
  */
 import { spawn } from "node:child_process";
 import {
-  createWriteStream,
+  appendFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -17,7 +17,12 @@ import { join } from "node:path";
 
 const root = import.meta.dirname;
 const envFile = join(root, ".env");
-if (existsSync(envFile)) process.loadEnvFile(envFile);
+let envError;
+try {
+  if (existsSync(envFile)) process.loadEnvFile(envFile);
+} catch (error) {
+  envError = error;
+}
 const env = { ...process.env };
 const defaults = {
   NODE_ENV: "production",
@@ -37,39 +42,47 @@ for (const name of readdirSync(logDir)) {
 
 // The VPS clock, as in "2026-10-05 22:52:40".
 const now = () => new Date().toLocaleString("sv-SE");
-let day = "";
-let log;
+// Synchronous, so the reason for a crash is on disk before the process ends.
 const write = (chunk) => {
-  const today = now().slice(0, 10);
-  if (today !== day) {
-    log?.end();
-    day = today;
-    log = createWriteStream(join(logDir, `brique-${today}.log`), { flags: "a" });
+  try {
+    appendFileSync(join(logDir, `brique-${now().slice(0, 10)}.log`), chunk);
+  } catch {
+    // Nowhere else to report it: the task has no console.
   }
-  log.write(chunk);
 };
 const note = (message) => write(`[${now()}] ${message}\n`);
+process.on("uncaughtException", (error) => {
+  note(`erro no supervisor: ${error?.stack ?? error}`);
+  process.exit(1);
+});
 
 let failures = 0;
 function start() {
   const startedAt = Date.now();
+  let handled = false;
+  const restart = (reason) => {
+    if (handled) return;
+    handled = true;
+    failures = Date.now() - startedAt > 60_000 ? 1 : failures + 1;
+    const wait = Math.min(30_000, 1000 * 2 ** (failures - 1));
+    note(`${reason}; reiniciando em ${wait / 1000}s`);
+    setTimeout(start, wait);
+  };
   const child = spawn(process.execPath, ["server.js"], {
     cwd: join(root, "app"),
     env,
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });
+  child.on("error", (error) => restart(`não consegui iniciar o app (${error.message})`));
+  child.on("exit", (code, signal) => restart(`app parou (código ${code ?? signal})`));
+  if (!child.pid) return;
   // The stop script ends both processes by these ids.
   writeFileSync(join(env.DATA_DIR, "brique.pid"), `${process.pid}\n${child.pid}\n`);
   note(`app iniciado (pid ${child.pid}) em http://${env.HOST}:${env.PORT}${env.BASE_PATH ?? ""}`);
   child.stdout.on("data", write);
   child.stderr.on("data", write);
-  child.on("exit", (code, signal) => {
-    failures = Date.now() - startedAt > 60_000 ? 1 : failures + 1;
-    const wait = Math.min(30_000, 1000 * 2 ** (failures - 1));
-    note(`app parou (código ${code ?? signal}); reiniciando em ${wait / 1000}s`);
-    setTimeout(start, wait);
-  });
 }
 note("supervisor iniciado");
+if (envError) note(`não consegui ler o .env (${envError.message}); seguindo com os valores padrão`);
 start();
