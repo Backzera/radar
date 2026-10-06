@@ -5,6 +5,7 @@ import {
   Download,
   KeyRound,
   LogOut,
+  ShieldCheck,
   Target,
   Users,
 } from "lucide-react";
@@ -123,11 +124,13 @@ export function Account({
   onLogout,
   onSaved,
   onManageUsers,
+  onOpenAudit,
 }: {
   me: Me;
   onLogout: () => void;
   onSaved: () => void;
   onManageUsers?: () => void;
+  onOpenAudit?: () => void;
 }) {
   const toast = useToast();
   const prefs = useApi<Preferences>("brick/preferences");
@@ -200,6 +203,11 @@ export function Account({
             {onManageUsers && (
               <button className="btn btn-sm" onClick={onManageUsers}>
                 <Users size={15} /> Gerenciar usuários
+              </button>
+            )}
+            {onOpenAudit && (
+              <button className="btn btn-sm" onClick={onOpenAudit}>
+                <ShieldCheck size={15} /> Auditoria
               </button>
             )}
             <button className="btn btn-ghost btn-sm" onClick={onLogout}>

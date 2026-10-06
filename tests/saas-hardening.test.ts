@@ -240,7 +240,7 @@ test("F09: agendador serve duas contas sem interface e respeita desligamento de 
 test("Migration 0005 preserva linhas e ownership existentes e mantém foreign keys válidas", () => {
   const db = new DatabaseSync(":memory:");
   for (const f of readdirSync("drizzle")
-    .filter((f) => f.endsWith(".sql") && !f.startsWith("0005"))
+    .filter((f) => f.endsWith(".sql") && f < "0005")
     .sort())
     db.exec(readFileSync("drizzle/" + f, "utf8"));
   db.prepare("INSERT INTO users VALUES ('existing','2026-01-01',?,0)").run(
@@ -263,7 +263,7 @@ test("Migration 0005 preserva linhas e ownership existentes e mantém foreign ke
 test("Migration 0005 preserva sete buscas ativas de uma conta legada sem elevar cota paga", () => {
   const db = new DatabaseSync(":memory:");
   for (const file of readdirSync("drizzle")
-    .filter((file) => file.endsWith(".sql") && !file.startsWith("0005"))
+    .filter((file) => file.endsWith(".sql") && file < "0005")
     .sort()) {
     db.exec(readFileSync("drizzle/" + file, "utf8"));
   }

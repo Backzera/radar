@@ -64,6 +64,13 @@
       "when": 1791008817566,
       "tag": "0008_user_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1791303530408,
+      "tag": "0009_activity_log",
+      "breakpoints": true
     }
   ]
 }

@@ -722,3 +722,28 @@ export const appSettings = sqliteTable("app_settings", {
   value: text("value").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+// Audit trail for the owner: who did what, when and from where. Product names
+// and values are kept so the record still reads after an item is deleted; a
+// deleted account takes its own rows with it.
+export const activityLog = sqliteTable(
+  "activity_log",
+  {
+    id: text("id").primaryKey().notNull(),
+    createdAt: text("created_at").notNull(),
+    actorId: text("actor_id"),
+    userId: text("user_id"),
+    action: text("action").notNull(),
+    entity: text("entity"),
+    entityId: text("entity_id"),
+    summary: text("summary").notNull(),
+    details: text("details"),
+    ip: text("ip"),
+    userAgent: text("user_agent"),
+  },
+  (t) => [
+    index("idx_activity_recent").on(t.createdAt),
+    index("idx_activity_user").on(t.userId, t.createdAt),
+    index("idx_activity_action").on(t.action, t.createdAt),
+  ],
+);

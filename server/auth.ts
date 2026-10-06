@@ -12,6 +12,7 @@ import {
   type RuntimeConfig,
 } from "./security";
 import { json } from "./respond";
+import { activityStatement, actorOf, maskEmail, recordActivity } from "./activity";
 
 export const SESSION_COOKIE = "brick_session";
 const SESSION_DAYS = 30;
@@ -329,11 +330,22 @@ export async function handleAuthRoute(
   const ip = clientIp(request);
   if (path === "auth/logout") {
     const token = readCookie(request, SESSION_COOKIE);
-    if (token)
-      await db
-        .prepare("DELETE FROM auth_sessions WHERE id=?")
-        .bind(await sha256(token))
-        .run();
+    if (token) {
+      const id = await sha256(token);
+      const session = await db
+        .prepare("SELECT user_id FROM auth_sessions WHERE id=?")
+        .bind(id)
+        .first<{ user_id: string }>();
+      await db.prepare("DELETE FROM auth_sessions WHERE id=?").bind(id).run();
+      if (session)
+        await recordActivity(db, actorOf(request, session.user_id), {
+          userId: session.user_id,
+          action: "logout",
+          entity: "account",
+          entityId: session.user_id,
+          summary: "Saiu",
+        });
+    }
     return json({ signedOut: true }, 200, {
       "Set-Cookie": sessionCookie(request, config, "", 0),
     });
@@ -360,6 +372,13 @@ export async function handleAuthRoute(
       db
         .prepare("UPDATE auth_credentials SET last_login_at=? WHERE user_id=?")
         .bind(new Date().toISOString(), userId),
+      activityStatement(db, actorOf(request, userId), {
+        userId,
+        action: "account_created",
+        entity: "account",
+        entityId: userId,
+        summary: `Criou a conta pelo site${data.plan ? ` (plano ${data.plan === "pro" ? "Pro" : "Essencial"})` : ""}`,
+      }),
     ]);
     return json(
       { user: { id: userId, name: data.name, email: data.email } },
@@ -392,17 +411,36 @@ export async function handleAuthRoute(
         }
       : null,
   );
-  if (!row || !valid) throw new HttpError(401, "E-mail ou senha incorretos.");
+  if (!row || !valid) {
+    await recordActivity(db, actorOf(request, null), {
+      userId: row?.user_id ?? null,
+      action: "login_failed",
+      entity: "account",
+      entityId: row?.user_id ?? null,
+      summary: row
+        ? "Tentou entrar com a senha errada"
+        : `Tentou entrar com um e-mail sem conta (${maskEmail(data.email)})`,
+    });
+    throw new HttpError(401, "E-mail ou senha incorretos.");
+  }
   // Only after the right password: a blocked account is not revealed to guessers.
   const account = await db
     .prepare("SELECT status FROM accounts WHERE user_id=?")
     .bind(row.user_id)
     .first<{ status: string }>();
-  if (account?.status !== "active")
+  if (account?.status !== "active") {
+    await recordActivity(db, actorOf(request, row.user_id), {
+      userId: row.user_id,
+      action: "login_blocked",
+      entity: "account",
+      entityId: row.user_id,
+      summary: "Tentou entrar com o acesso bloqueado",
+    });
     throw new HttpError(
       403,
       "Seu acesso está bloqueado. Fale com o suporte para reativar.",
     );
+  }
   const session = await startSession(db, request, config, row.user_id),
     now = new Date().toISOString();
   await db.batch([
@@ -413,6 +451,13 @@ export async function handleAuthRoute(
     db
       .prepare("UPDATE auth_credentials SET last_login_at=? WHERE user_id=?")
       .bind(now, row.user_id),
+    activityStatement(db, actorOf(request, row.user_id), {
+      userId: row.user_id,
+      action: "login",
+      entity: "account",
+      entityId: row.user_id,
+      summary: "Entrou",
+    }),
   ]);
   return json(
     { user: { id: row.user_id, name: row.name, email: data.email } },
@@ -453,11 +498,28 @@ export async function changeOwnPassword(
     salt: row.password_salt,
     iterations: row.iterations,
   });
-  if (!valid) throw new HttpError(422, "A senha atual não confere.");
+  const actor = actorOf(request, userId);
+  if (!valid) {
+    await recordActivity(db, actor, {
+      userId,
+      action: "password_change_failed",
+      entity: "account",
+      entityId: userId,
+      summary: "Errou a senha atual ao tentar trocar a senha",
+    });
+    throw new HttpError(422, "A senha atual não confere.");
+  }
   const session = await startSession(db, request, config, userId);
   await db.batch([
     ...(await setPassword(db, userId, data.newPassword)),
     session.statement,
+    activityStatement(db, actor, {
+      userId,
+      action: "password_changed",
+      entity: "account",
+      entityId: userId,
+      summary: "Trocou a própria senha (os outros aparelhos foram desconectados)",
+    }),
   ]);
   return json({ changed: true }, 200, { "Set-Cookie": session.cookie });
 }

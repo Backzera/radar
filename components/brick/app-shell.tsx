@@ -7,6 +7,7 @@ import {
   Plus,
   Radar,
   Receipt,
+  ShieldCheck,
   UserRound,
   Users,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import { FEATURES } from "./brand";
 import { Logo } from "./logo";
 import { Account, initials } from "./account";
 import { AdminUsers } from "./admin-users";
+import { AdminAudit, type AuditTab } from "./admin-audit";
 import { Dashboard } from "./dashboard";
 import { Inventory } from "./inventory";
 import { ItemDetailDrawer } from "./item-detail";
@@ -37,6 +39,7 @@ const VIEWS = [
   { id: "radar", label: "Radar", icon: Radar, soon: !FEATURES.radar },
   { id: "conta", label: "Conta", icon: UserRound },
   { id: "usuarios", label: "Usuários", icon: Users, adminOnly: true },
+  { id: "auditoria", label: "Auditoria", icon: ShieldCheck, adminOnly: true },
 ] as const;
 type View = (typeof VIEWS)[number]["id"];
 
@@ -84,7 +87,7 @@ function Shell({ me }: { me: Me }) {
   );
   const goTo = useCallback(
     (v: string, extra: Record<string, string> = {}) => {
-      navigate({ v, status: null, item: null, ...extra });
+      navigate({ v, status: null, item: null, aba: null, usuario: null, ...extra });
       scrollTo({ top: 0, behavior: "smooth" });
     },
     [navigate],
@@ -200,9 +203,22 @@ function Shell({ me }: { me: Me }) {
                 prefs.refresh();
               }}
               onManageUsers={me.admin ? () => goTo("usuarios") : undefined}
+              onOpenAudit={me.admin ? () => goTo("auditoria") : undefined}
             />
           )}
-          {view === "usuarios" && me.admin && <AdminUsers me={me} />}
+          {view === "usuarios" && me.admin && (
+            <AdminUsers
+              me={me}
+              onOpenAudit={(id) => goTo("auditoria", { aba: "atividade", usuario: id })}
+            />
+          )}
+          {view === "auditoria" && me.admin && (
+            <AdminAudit
+              tab={(["geral", "produtos", "atividade"].includes(params.get("aba") ?? "") ? params.get("aba") : "geral") as AuditTab}
+              user={params.get("usuario") ?? ""}
+              onChange={({ tab, user }) => navigate({ aba: tab, usuario: user || null })}
+            />
+          )}
         </main>
       </div>
       <nav className="tabbar" aria-label="Navegação">

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import {
+  Activity,
   Ban,
   Copy,
   KeyRound,
@@ -289,7 +290,13 @@ function CreateUserModal({
   );
 }
 
-export function AdminUsers({ me }: { me: Me }) {
+export function AdminUsers({
+  me,
+  onOpenAudit,
+}: {
+  me: Me;
+  onOpenAudit?: (userId: string) => void;
+}) {
   const toast = useToast();
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
@@ -542,6 +549,16 @@ export function AdminUsers({ me }: { me: Me }) {
                       <td className="muted">{dateText(u.lastLoginAt)}</td>
                       <td className="num-cell">
                         <div className="row-actions">
+                          {onOpenAudit && (
+                            <button
+                              className="btn btn-ghost btn-icon"
+                              title="Ver atividade"
+                              aria-label={`Ver atividade de ${u.name}`}
+                              onClick={() => onOpenAudit(u.id)}
+                            >
+                              <Activity size={16} />
+                            </button>
+                          )}
                           <button
                             className="btn btn-ghost btn-icon"
                             title="Redefinir senha"

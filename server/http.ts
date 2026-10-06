@@ -55,6 +55,7 @@ import { changeOwnPassword, handleAuthRoute, sessionPrincipal } from "./auth";
 import { handleInventoryRoute, PHOTO_UPLOAD } from "./inventory-routes";
 import { getPreferences, type MediaStore } from "./inventory";
 import { handleAdminUsersRoute } from "./admin-users";
+import { handleAdminAuditRoute } from "./admin-audit";
 export { json };
 const paging = (url: URL) =>
   z
@@ -168,7 +169,12 @@ export function createHandler(
       }
       // Photos are immutable and browser-cached; a grid of them must not eat
       // the per-minute budget of real API reads.
-      if (!(request.method === "GET" && path.startsWith("media/"))) {
+      if (
+        !(
+          request.method === "GET" &&
+          (path.startsWith("media/") || path.startsWith("admin/media/"))
+        )
+      ) {
         const window = Math.floor(Date.now() / 60000),
           rateKey = `http:${userId}:${request.method === "GET" ? "read" : "write"}`;
         const rate = await db
@@ -213,6 +219,15 @@ export function createHandler(
         options.media,
       );
       if (adminUsers) return adminUsers;
+      const adminAudit = await handleAdminAuditRoute(
+        db,
+        principal,
+        request,
+        url,
+        path,
+        options.media,
+      );
+      if (adminAudit) return adminAudit;
       if (request.method === "POST" && path === "auth/password")
         // await keeps a rejection inside this try, so it maps to its HTTP status.
         return await changeOwnPassword(db, request, config, userId, await readBoundedJson(request));

@@ -652,17 +652,18 @@ export async function coverPhoto(
     .run();
   return getItem(db, userId, itemId);
 }
+/** A photo of the user's own items; null userId is the admin, who sees any photo. */
 export async function photoResponse(
   db: Database,
-  userId: string,
+  userId: string | null,
   photoId: string,
   media?: MediaStore,
 ) {
   const row = await db
     .prepare(
-      "SELECT object_key,content_type FROM inventory_photos WHERE id=? AND user_id=?",
+      "SELECT object_key,content_type FROM inventory_photos WHERE id=? AND (? IS NULL OR user_id=?)",
     )
-    .bind(photoId, userId)
+    .bind(photoId, userId, userId)
     .first<{ object_key: string; content_type: string }>();
   const object = row && media ? await media.get(row.object_key) : null;
   if (!row || !object) throw new HttpError(404, "Foto não encontrada.");
@@ -746,18 +747,31 @@ export async function inventorySummary(
   );
 }
 
-/** Spreadsheet export: ";" and comma decimals open cleanly in Brazilian Excel. */
-export async function exportCsv(db: Database, userId: string) {
-  const t = today();
-  const items = (await itemRows(db, userId)).map((r) => present(r, t));
-  const money = (c: number | null) =>
-    c == null ? "" : (c / 100).toFixed(2).replace(".", ",");
+export const csvMoney = (c: number | null) =>
+  c == null ? "" : (c / 100).toFixed(2).replace(".", ",");
+/** Spreadsheet download: ";" and comma decimals open cleanly in Brazilian Excel. */
+export function csvResponse(header: string[], rows: unknown[][], filename: string) {
   const cell = (value: unknown) => {
     let text = value == null ? "" : String(value);
     // Formula injection guard: a cell must never start an Excel formula.
     if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
     return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
   };
+  const lines = [header, ...rows].map((row) => row.map(cell).join(";"));
+  return new Response("﻿" + lines.join("\r\n"), {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+export async function exportCsv(db: Database, userId: string) {
+  const t = today();
+  const items = (await itemRows(db, userId)).map((r) => present(r, t));
+  const money = csvMoney;
   const header = [
     "Produto",
     "Categoria",
@@ -781,8 +795,7 @@ export async function exportCsv(db: Database, userId: string) {
     "Dias em estoque",
     "Observações",
   ];
-  const lines = items.map((i) =>
-    [
+  const rows = items.map((i) => [
       i.name,
       CATEGORY_LABELS[i.category],
       i.brand,
@@ -804,16 +817,6 @@ export async function exportCsv(db: Database, userId: string) {
       i.figures.marginPct == null ? "" : String(i.figures.marginPct).replace(".", ","),
       i.figures.days,
       i.notes,
-    ]
-      .map(cell)
-      .join(";"),
-  );
-  return new Response("﻿" + [header.join(";"), ...lines].join("\r\n"), {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="estoque-${t}.csv"`,
-      "Cache-Control": "no-store",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
+    ]);
+  return csvResponse(header, rows, `estoque-${t}.csv`);
 }

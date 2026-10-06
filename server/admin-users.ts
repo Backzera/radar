@@ -11,13 +11,15 @@ import {
 import type { MediaStore } from "./inventory";
 import { json } from "./respond";
 import { HttpError, readBoundedJson, type Principal } from "./security";
-import { all, uid, type Database } from "./store";
+import { all, type Database } from "./store";
+import { activityStatement, actorOf, maskEmail, type Actor } from "./activity";
 
 // Every table that holds a person's data. Children of listings and inventory
 // items come first so foreign keys never block the delete; users goes last.
-// audit_events stays: it is the owner's record of what was done, and it holds
-// only ids, so no personal data outlives a deleted account.
+// The person's own activity goes too; the deletion itself is then recorded with
+// a masked e-mail, so the owner keeps the fact without the personal data.
 const USER_TABLES = [
+  "activity_log",
   "listing_snapshots",
   "deal_pipeline",
   "availability_checks",
@@ -66,13 +68,6 @@ const listSchema = z
 const createSchema = accountSchema
   .extend({ password: accountSchema.shape.password.optional() })
   .strict();
-
-const audit = (db: Database, actor: string, subject: string, action: string) =>
-  db
-    .prepare(
-      "INSERT INTO audit_events (id,actor_id,subject_id,action,created_at) VALUES (?,?,?,?,?)",
-    )
-    .bind(uid(), actor, subject, action, new Date().toISOString());
 
 async function target(db: Database, userId: string) {
   const row = await db
@@ -156,6 +151,7 @@ export async function listUsers(db: Database, query: unknown) {
 export async function deleteUser(
   db: Database,
   admin: Principal,
+  actor: Actor,
   userId: string,
   input: unknown,
   media?: MediaStore,
@@ -175,13 +171,26 @@ export async function deleteUser(
       userId,
     )
   ).map((r) => r.object_key);
+  const counts = await db
+    .prepare(
+      "SELECT COUNT(*) AS items,SUM(CASE WHEN status='sold' THEN 1 ELSE 0 END) AS sold FROM inventory_items WHERE user_id=?",
+    )
+    .bind(userId)
+    .first<{ items: number; sold: number | null }>();
   // One transaction: the account is either fully gone or untouched.
   await db.batch([
     ...USER_TABLES.map((table) =>
       db.prepare(`DELETE FROM ${table} WHERE user_id=?`).bind(userId),
     ),
     db.prepare("DELETE FROM users WHERE id=?").bind(userId),
-    audit(db, admin.userId, userId, "user_deleted"),
+    activityStatement(db, actor, {
+      userId,
+      action: "admin_user_deleted",
+      entity: "account",
+      entityId: userId,
+      summary: `Excluiu a conta ${maskEmail(user.email)} com ${counts?.items ?? 0} produtos (${counts?.sold ?? 0} vendidos) e ${keys.length} fotos`,
+      details: { items: counts?.items ?? 0, sold: counts?.sold ?? 0, photos: keys.length },
+    }),
   ]);
   for (let i = 0; i < keys.length; i += 1000)
     await media?.delete(keys.slice(i, i + 1000)).catch(() => undefined);
@@ -198,6 +207,7 @@ export async function handleAdminUsersRoute(
   media?: MediaStore,
 ): Promise<Response | null> {
   if (!path.startsWith("admin/users") && path !== "admin/settings") return null;
+  const actor = actorOf(request, admin.userId);
   if (request.method === "GET") {
     if (path === "admin/users")
       return json(await listUsers(db, Object.fromEntries(url.searchParams)));
@@ -217,12 +227,13 @@ export async function handleAdminUsersRoute(
           "INSERT INTO app_settings (key,value,updated_at) VALUES ('signup_open',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",
         )
         .bind(String(open), new Date().toISOString()),
-      audit(
-        db,
-        admin.userId,
-        "signup",
-        open ? "signup_opened" : "signup_closed",
-      ),
+      activityStatement(db, actor, {
+        userId: null,
+        action: open ? "admin_signup_opened" : "admin_signup_closed",
+        entity: "settings",
+        entityId: "signup",
+        summary: open ? "Abriu o cadastro pelo site" : "Fechou o cadastro pelo site",
+      }),
     ]);
     return json({ signupOpen: open });
   }
@@ -232,7 +243,13 @@ export async function handleAdminUsersRoute(
     const account = await accountStatements(db, { ...data, password });
     await db.batch([
       ...account.statements,
-      audit(db, admin.userId, account.userId, "user_created"),
+      activityStatement(db, actor, {
+        userId: account.userId,
+        action: "admin_user_created",
+        entity: "account",
+        entityId: account.userId,
+        summary: `Cadastrou o usuário ${data.name} (${data.email})${data.plan ? ` no plano ${data.plan === "pro" ? "Pro" : "Essencial"}` : ""}`,
+      }),
     ]);
     return json(
       {
@@ -247,10 +264,12 @@ export async function handleAdminUsersRoute(
   if (!m) throw new HttpError(404, "Rota não encontrada.");
   const userId = decodeURIComponent(m[1]);
   if (request.method === "DELETE" && !m[2])
-    return json(await deleteUser(db, admin, userId, body, media));
+    return json(await deleteUser(db, admin, actor, userId, body, media));
   if (request.method !== "POST" || !m[2])
     throw new HttpError(405, "Método não permitido.");
-  await target(db, userId);
+  const person = await target(db, userId);
+  const about = (action: Parameters<typeof activityStatement>[2]["action"], summary: string) =>
+    activityStatement(db, actor, { userId, action, entity: "account", entityId: userId, summary });
   if (m[2] === "status") {
     const { status } = z
       .object({ status: z.enum(["active", "blocked"]) })
@@ -264,12 +283,9 @@ export async function handleAdminUsersRoute(
       ...(status === "blocked"
         ? [db.prepare("DELETE FROM auth_sessions WHERE user_id=?").bind(userId)]
         : []),
-      audit(
-        db,
-        admin.userId,
-        userId,
-        status === "active" ? "user_unblocked" : "user_blocked",
-      ),
+      status === "active"
+        ? about("admin_user_unblocked", `Liberou o acesso de ${person.name}`)
+        : about("admin_user_blocked", `Bloqueou o acesso de ${person.name} (desconectado na hora)`),
     ]);
     return json({ status });
   }
@@ -281,7 +297,7 @@ export async function handleAdminUsersRoute(
     const next = password ?? generatePassword();
     await db.batch([
       ...(await setPassword(db, userId, next)),
-      audit(db, admin.userId, userId, "password_reset"),
+      about("admin_password_reset", `Redefiniu a senha de ${person.name}`),
     ]);
     return json({ temporaryPassword: password ? null : next });
   }
@@ -295,7 +311,7 @@ export async function handleAdminUsersRoute(
         "INSERT INTO brick_preferences (user_id,selected_plan,updated_at) VALUES (?,?,?) ON CONFLICT(user_id) DO UPDATE SET selected_plan=excluded.selected_plan,updated_at=excluded.updated_at",
       )
       .bind(userId, plan, new Date().toISOString()),
-    audit(db, admin.userId, userId, `plan_${plan}`),
+    about("admin_plan_changed", `Mudou o plano de ${person.name} para ${plan === "pro" ? "Pro" : "Essencial"}`),
   ]);
   return json({ plan });
 }

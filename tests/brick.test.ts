@@ -495,10 +495,14 @@ test("admin: excluir apaga produtos, custos, fotos, sessões e conta; o e-mail f
     const row = await db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${column}=?`).bind(id).first<{ n: number }>();
     assert.equal(row?.n, 0, table);
   }
-  const audit = await db
-    .prepare("SELECT action,subject_id FROM audit_events WHERE action='user_deleted'")
-    .first<{ action: string; subject_id: string }>();
-  assert.equal(audit?.subject_id, id);
+  // The person's own trail goes with the account; only the deletion record stays, with a masked e-mail.
+  const left = await db
+    .prepare("SELECT action,summary FROM activity_log WHERE user_id=? ORDER BY created_at")
+    .bind(id)
+    .all<{ action: string; summary: string }>();
+  assert.deepEqual(left.results.map((r) => r.action), ["admin_user_deleted"]);
+  assert.match(left.results[0].summary, /c\*\*\*@example\.test com 1 produtos/);
+  assert.doesNotMatch(left.results[0].summary, /cliente@example\.test/);
   await signup("cliente@example.test", "Cliente de novo");
 });
 

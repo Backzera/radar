@@ -233,11 +233,14 @@ export function Photo({
   category,
   alt,
   className = "",
+  admin = false,
 }: {
   id: string | null;
   category: Category;
   alt: string;
   className?: string;
+  /** Any user's photo, through the admin route. */
+  admin?: boolean;
 }) {
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
   const Icon = CATEGORY_ICONS[category];
@@ -246,7 +249,7 @@ export function Photo({
       {id && state !== "error" ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={withBase(`/api/v1/media/${encodeURIComponent(id)}`)}
+          src={withBase(`/api/v1/${admin ? "admin/" : ""}media/${encodeURIComponent(id)}`)}
           alt={alt}
           loading="lazy"
           decoding="async"
