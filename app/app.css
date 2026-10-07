@@ -2147,3 +2147,256 @@
     height: 40px;
   }
 }
+
+/* ───────── Crediário (venda parcelada) ───────── */
+.sales-tabs,
+.pay-mode {
+  margin-bottom: 16px;
+}
+.sales-tabs button,
+.pay-mode button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.segmented .count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 11.5px;
+  color: var(--brand-ink);
+  background: var(--brand);
+}
+.pay-mode {
+  display: flex;
+  width: 100%;
+  margin: 14px 0 0;
+}
+.pay-mode button {
+  flex: 1;
+  justify-content: center;
+}
+.plan {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+}
+.plan-rows {
+  display: grid;
+  gap: 10px;
+}
+.plan-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+  gap: 10px;
+}
+.plan-row .unit-n {
+  margin-bottom: 8px;
+}
+.plan-check {
+  display: block;
+  line-height: 1.5;
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--good);
+}
+.plan-check svg {
+  display: inline;
+  margin-right: 4px;
+  vertical-align: -3px;
+}
+.plan-check.bad {
+  color: #fca5a5;
+}
+.link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.installment-line {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 0.9fr) minmax(0, 1.2fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+}
+.installment-state {
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.installment-line.paid .installment-state,
+.receivable-row.paid .receivable-money small {
+  color: var(--good);
+}
+.installment-line.overdue,
+.receivable-row.overdue {
+  border-color: rgba(251, 113, 133, 0.35);
+  background: rgba(251, 113, 133, 0.06);
+}
+.installment-line.overdue .installment-state,
+.receivable-row.overdue .receivable-money small {
+  color: #fca5a5;
+  font-weight: 600;
+}
+.installment-line.today .installment-state,
+.receivable-row.today .receivable-money small {
+  color: var(--warn);
+  font-weight: 600;
+}
+.receivables {
+  display: grid;
+  gap: 8px;
+}
+.receivable-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+}
+.receivable-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.receivable-item .photo {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 11px;
+}
+.receivable-item .mini-text {
+  min-width: 0;
+}
+.receivable-item strong {
+  display: block;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 580;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.receivable-item small,
+.receivable-money small {
+  display: block;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+.receivable-money {
+  text-align: right;
+  white-space: nowrap;
+}
+.receivable-money strong {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.receivable-note {
+  color: var(--warn);
+}
+.receivable-strip .card-head {
+  flex-wrap: wrap;
+}
+.receivable-figures {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.receivable-figures > div {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.025);
+}
+.receivable-figures small {
+  display: block;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.receivable-figures strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.receivable-figures span {
+  display: block;
+  font-size: 12px;
+}
+.receivable-figures .late,
+.kpi-late {
+  border-color: rgba(251, 113, 133, 0.35) !important;
+  background: rgba(251, 113, 133, 0.08) !important;
+}
+.receivable-figures .late strong,
+.receivable-figures .late span,
+.kpi-late .kpi-value {
+  color: #fca5a5;
+}
+@media (max-width: 640px) {
+  .receivable-figures {
+    grid-template-columns: 1fr 1fr;
+  }
+  /* Phones: the product gets the whole first line; value and button share the second. */
+  .receivable-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 10px;
+  }
+  .receivable-item {
+    grid-column: 1 / -1;
+  }
+  .receivable-money {
+    text-align: left;
+  }
+  .installment-line {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+  }
+  .installment-line .installment-state {
+    grid-column: 2 / 3;
+    grid-row: 2;
+  }
+  .installment-line > .btn {
+    grid-row: 1 / span 2;
+  }
+  /* Phones: value and due date one under the other, at full width. */
+  .plan {
+    padding: 12px 10px;
+  }
+  .plan-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 8px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  .plan-row .unit-n {
+    grid-row: 1 / span 2;
+    align-self: start;
+    margin: 26px 0 0;
+  }
+  .plan-row .field {
+    grid-column: 2;
+  }
+}

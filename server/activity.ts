@@ -191,12 +191,20 @@ export function itemActivity(
         summary: `Mudou ${name} de ${STATUS_LABELS[before.status]} para ${STATUS_LABELS[after.status]}`,
         details: { from: before.status, to: after.status },
       };
-    case "sell":
+    case "sell": {
+      const parts = item.installments.filter((p) => p.number > 0);
+      const down = item.installments.find((p) => p.number === 0);
+      const plan = parts.length
+        ? ` · parcelado: ${down ? `entrada ${money(down.amountCents)} + ` : ""}${parts.length}x (${parts
+            .map((p) => `${money(p.amountCents)} em ${day(p.dueDate)}`)
+            .join(", ")})`
+        : "";
       return {
         ...base,
         action: "item_sold",
-        summary: `Vendeu ${name} por ${money(item.salePriceCents)} · lucro ${money(item.figures.profitCents)}`,
+        summary: `Vendeu ${name} por ${money(item.salePriceCents)}${item.soldTo ? ` para ${item.soldTo}` : ""} · lucro ${money(item.figures.profitCents)}${plan}`,
         details: {
+          installments: item.installments.map((p) => ({ number: p.number, amountCents: p.amountCents, dueDate: p.dueDate })),
           salePriceCents: item.salePriceCents,
           saleFeesCents: item.saleFeesCents,
           soldAt: item.soldAt,
@@ -206,6 +214,7 @@ export function itemActivity(
           marginPct: item.figures.marginPct,
         },
       };
+    }
     case "unsell":
       return {
         ...base,

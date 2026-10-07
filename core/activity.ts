@@ -16,7 +16,7 @@ export const ACTIVITY_GROUPS = {
       "item_ungrouped",
     ],
   },
-  sales: { label: "Vendas", actions: ["item_sold", "item_unsold"] },
+  sales: { label: "Vendas", actions: ["item_sold", "item_unsold", "installment_paid", "installment_unpaid"] },
   access: {
     label: "Acessos",
     actions: [
@@ -66,6 +66,8 @@ export const ACTION_LABELS: Record<ActivityAction, string> = {
   item_ungrouped: "Unidade separada",
   item_sold: "Venda registrada",
   item_unsold: "Venda desfeita",
+  installment_paid: "Parcela recebida",
+  installment_unpaid: "Recebimento desfeito",
   account_created: "Conta criada",
   login: "Entrou",
   login_failed: "Senha errada",

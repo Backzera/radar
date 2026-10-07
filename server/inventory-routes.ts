@@ -17,6 +17,8 @@ import {
   joinUnits,
   leaveUnits,
   listItems,
+  listReceivables,
+  payInstallment,
   photoResponse,
   savePreferences,
   sellItem,
@@ -86,6 +88,8 @@ export async function handleInventoryRoute(
     }
     if (path === "brick/preferences")
       return json(await getPreferences(db, userId));
+    if (path === "inventory/receivables")
+      return json(await listReceivables(db, userId, Object.fromEntries(url.searchParams)));
     const item = path.match(/^inventory\/([^/]+)$/);
     if (item) return json(await getItem(db, userId, id(item[1])));
     return null;
@@ -144,6 +148,24 @@ export async function handleInventoryRoute(
     if (m) {
       const [itemId, photoId] = [id(m[1]), id(m[2])];
       return tracked("photo_cover", null, () => coverPhoto(db, userId, itemId, photoId));
+    }
+    m = path.match(/^inventory\/([^/]+)\/installments\/([^/]+)$/);
+    if (m) {
+      const [itemId, installmentId] = [id(m[1]), id(m[2])];
+      const item = await payInstallment(db, userId, itemId, installmentId, body);
+      const part = item.installments.find((p) => p.id === installmentId);
+      if (part)
+        await recordActivity(db, actor, {
+          userId,
+          action: part.paidAt ? "installment_paid" : "installment_unpaid",
+          entity: "item",
+          entityId: itemId,
+          summary: part.paidAt
+            ? `Recebeu a parcela ${part.number} de ${item.installmentCount} de ${item.name} (${formatCents(part.amountCents)}${item.soldTo ? `, ${item.soldTo}` : ""})`
+            : `Desmarcou o recebimento da parcela ${part.number} de ${item.name}`,
+          details: { number: part.number, amountCents: part.amountCents, dueDate: part.dueDate, paidAt: part.paidAt },
+        });
+      return json(item);
     }
     m = path.match(/^inventory\/([^/]+)\/(units|group)$/);
     if (m) {

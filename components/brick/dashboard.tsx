@@ -4,6 +4,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Boxes,
+  CalendarClock,
   CircleDollarSign,
   Clock,
   Hourglass,
@@ -22,12 +23,11 @@ import {
   STATUS_LABELS,
   formatCents,
   type Period,
-  type Summary,
 } from "@/core/brick";
 import { useApi } from "./api";
 import { CategoryBars, GoalMeter, ProfitColumns, Sparkline } from "./charts";
 import { CountUp, EmptyState, Photo } from "./ui";
-import type { Me } from "./types";
+import type { InventorySummary, Me } from "./types";
 
 export function Delta({ pct, label = "vs período anterior" }: { pct: number | null; label?: string }) {
   if (pct === null) return null;
@@ -104,7 +104,7 @@ export function Dashboard({
   goTo: (view: string, params?: Record<string, string>) => void;
 }) {
   const [period, setPeriod] = useState<Period>("month");
-  const { data, loading, error, refresh } = useApi<Summary>(`inventory/summary?period=${period}`);
+  const { data, loading, error, refresh } = useApi<InventorySummary>(`inventory/summary?period=${period}`);
   useEffect(() => {
     if (version) refresh();
   }, [version, refresh]);
@@ -245,6 +245,47 @@ export function Dashboard({
           )}
         </section>
 
+        {data.receivables.openCount > 0 && (
+          <section className={`card span-12 fade-up receivable-strip ${data.receivables.overdueCount ? "late" : ""}`} style={{ "--i": 8 } as React.CSSProperties}>
+            <div className="card-head">
+              <div>
+                <h3>A receber no crediário</h3>
+                <p>
+                  {data.receivables.openCount} {data.receivables.openCount === 1 ? "parcela em aberto" : "parcelas em aberto"} de vendas
+                  parceladas
+                </p>
+              </div>
+              <button className="btn btn-sm" onClick={() => goTo("vendas", { aba: "receber" })}>
+                <CalendarClock size={15} /> Ver parcelas
+              </button>
+            </div>
+            <div className="receivable-figures">
+              <div>
+                <small>Total a receber</small>
+                <strong>
+                  <CountUp value={data.receivables.openCents} />
+                </strong>
+              </div>
+              <div className={data.receivables.overdueCount ? "late" : ""}>
+                <small>Atrasado</small>
+                <strong>{formatCents(data.receivables.overdueCents)}</strong>
+                {data.receivables.overdueCount > 0 && (
+                  <span>
+                    {data.receivables.overdueCount} {data.receivables.overdueCount === 1 ? "parcela" : "parcelas"}
+                  </span>
+                )}
+              </div>
+              <div>
+                <small>Vence este mês</small>
+                <strong>{formatCents(data.receivables.dueThisMonthCents)}</strong>
+              </div>
+              <div>
+                <small>Recebido este mês</small>
+                <strong className="profit-pos">{formatCents(data.receivables.receivedThisMonthCents)}</strong>
+              </div>
+            </div>
+          </section>
+        )}
         <section className="card span-4 fade-up" style={{ "--i": 8 } as React.CSSProperties}>
           <div className="card-head">
             <div>
@@ -254,6 +295,18 @@ export function Dashboard({
             <Boxes size={18} className="muted" />
           </div>
           <div className="figures" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            {/* Gross revenue if everything in stock sells at the asking price. */}
+            <div className="figure big" style={{ gridColumn: "1 / -1" }}>
+              <div>
+                <small>Faturamento bruto do estoque</small>
+                <strong>
+                  <CountUp value={data.stock.askingCents} />
+                </strong>
+              </div>
+              <small className="muted" style={{ textAlign: "right", maxWidth: 130 }}>
+                se vender tudo pelo preço pedido
+              </small>
+            </div>
             <div className="figure">
               <small>Capital investido</small>
               <strong>
@@ -269,7 +322,7 @@ export function Dashboard({
           </div>
           {data.stock.withoutAskingPrice > 0 && (
             <p className="muted" style={{ fontSize: 12.5, marginTop: 10 }}>
-              {data.stock.withoutAskingPrice} sem preço de venda definido ficam fora do lucro esperado.
+              {data.stock.withoutAskingPrice} sem preço de venda definido ficam fora do faturamento e do lucro esperado.
             </p>
           )}
           <div className="chips" style={{ marginTop: 14, marginBottom: 0, flexWrap: "wrap" }}>

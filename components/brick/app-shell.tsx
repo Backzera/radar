@@ -184,7 +184,7 @@ function Shell({ me }: { me: Me }) {
             />
           )}
           {view === "vendas" && (
-            <Sales version={version} onOpenItem={openItem} />
+            <Sales version={version} onOpenItem={openItem} initialTab={params.get("aba")} />
           )}
           {view === "radar" &&
             (FEATURES.radar ? (

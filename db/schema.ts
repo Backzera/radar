@@ -692,6 +692,28 @@ export const inventoryCosts = sqliteTable(
     check("inventory_cost_positive", sql`${t.amountCents}>0`),
   ],
 );
+// Sale on store credit (no card): the down payment is number 0, paid on the
+// sale day; each installment has its due date and is marked when received.
+export const saleInstallments = sqliteTable(
+  "sale_installments",
+  {
+    id: text("id").primaryKey().notNull(),
+    userId: text("user_id").notNull(),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => inventoryItems.id, { onDelete: "cascade" }),
+    number: integer("number").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    dueDate: text("due_date").notNull(),
+    paidAt: text("paid_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    index("idx_installments_item").on(t.userId, t.itemId),
+    index("idx_installments_due").on(t.userId, t.paidAt, t.dueDate),
+    check("installment_positive", sql`${t.amountCents}>0`),
+  ],
+);
 export const inventoryPhotos = sqliteTable(
   "inventory_photos",
   {

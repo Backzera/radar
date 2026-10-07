@@ -16,6 +16,7 @@ import {
   itemFigures,
   summarize,
   todayIn,
+  formatCents,
   type Category,
   type Status,
 } from "../core/brick";
@@ -64,11 +65,15 @@ interface ItemRow {
   costs_cents: number;
   cover_photo_id: string | null;
   photo_count: number;
+  installment_count: number;
+  receivable_cents: number;
 }
 const ITEM_SELECT = `SELECT i.*,
   COALESCE((SELECT SUM(c.amount_cents) FROM inventory_costs c WHERE c.user_id=i.user_id AND c.item_id=i.id),0) AS costs_cents,
   (SELECT p.id FROM inventory_photos p WHERE p.user_id=i.user_id AND p.item_id=i.id ORDER BY p.position,p.created_at LIMIT 1) AS cover_photo_id,
-  (SELECT COUNT(*) FROM inventory_photos p WHERE p.user_id=i.user_id AND p.item_id=i.id) AS photo_count
+  (SELECT COUNT(*) FROM inventory_photos p WHERE p.user_id=i.user_id AND p.item_id=i.id) AS photo_count,
+  (SELECT COUNT(*) FROM sale_installments s WHERE s.user_id=i.user_id AND s.item_id=i.id AND s.number>0) AS installment_count,
+  COALESCE((SELECT SUM(s.amount_cents) FROM sale_installments s WHERE s.user_id=i.user_id AND s.item_id=i.id AND s.paid_at IS NULL),0) AS receivable_cents
   FROM inventory_items i WHERE i.user_id=?`;
 
 function present(row: ItemRow, today: string) {
@@ -99,6 +104,9 @@ function present(row: ItemRow, today: string) {
     costsCents: Number(row.costs_cents),
     coverPhotoId: row.cover_photo_id,
     photoCount: Number(row.photo_count),
+    /** Installments of a store-credit sale (0 = paid in full) and what is still to receive. */
+    installmentCount: Number(row.installment_count ?? 0),
+    receivableCents: Number(row.receivable_cents ?? 0),
   };
   return { ...item, figures: itemFigures(item, today) };
 }
@@ -151,6 +159,25 @@ const saleSchema = z
     soldTo: optionalText(120),
   })
   .strict();
+export const MAX_INSTALLMENTS = 36;
+// Store credit: optional down payment plus installments, due on any date from the sale on.
+const planSchema = z
+  .object({
+    downPaymentCents: cents.default(0),
+    installments: z
+      .array(
+        z
+          .object({
+            amountCents: cents.refine((v) => v > 0, "Informe o valor da parcela."),
+            dueDate: z.string().refine(isValidDate, "Data inválida."),
+          })
+          .strict(),
+      )
+      .min(1, "Informe ao menos uma parcela.")
+      .max(MAX_INSTALLMENTS, `Use até ${MAX_INSTALLMENTS} parcelas.`),
+  })
+  .strict();
+const sellSchema = saleSchema.extend({ plan: planSchema.optional() }).strict();
 export const MAX_UNITS = 50;
 // One unit of a product bought in quantity: its own price and, if already sold, its own sale.
 const unitSchema = z
@@ -348,6 +375,22 @@ export async function getItem(db: Database, userId: string, id: string) {
         )
       ).map((r) => present(r, today()))
     : [];
+  const t = today();
+  const installments = (
+    await all<{ id: string; number: number; amount_cents: number; due_date: string; paid_at: string | null }>(
+      db,
+      "SELECT id,number,amount_cents,due_date,paid_at FROM sale_installments WHERE user_id=? AND item_id=? ORDER BY number",
+      userId,
+      id,
+    )
+  ).map((r) => ({
+    id: r.id,
+    number: r.number,
+    amountCents: r.amount_cents,
+    dueDate: r.due_date,
+    paidAt: r.paid_at,
+    state: installmentState(r.due_date, r.paid_at, t),
+  }));
   const name = sameName(item.name);
   const similar = (
     await all<{ id: string; name: string; status: Status; purchase_price_cents: number; group_id: string | null }>(
@@ -384,6 +427,7 @@ export async function getItem(db: Database, userId: string, id: string) {
           }
         : null,
     similar,
+    installments,
     photos,
     costs: costs.map((c) => ({
       id: c.id,
@@ -662,36 +706,186 @@ export async function sellItem(
   id: string,
   input: unknown,
 ) {
-  const sale = saleSchema.parse(input);
+  const { plan, ...sale } = sellSchema.parse(input);
   const current = await itemRow(db, userId, id);
   saleAfterPurchase(current.purchased_at, sale.soldAt);
-  await db
-    .prepare(
-      "UPDATE inventory_items SET status='sold',sale_price_cents=?,sale_fees_cents=?,sold_at=?,sale_channel=?,sold_to=?,version=version+1,updated_at=? WHERE id=? AND user_id=?",
-    )
-    .bind(
-      sale.salePriceCents,
-      sale.saleFeesCents,
-      sale.soldAt,
-      sale.saleChannel,
-      sale.soldTo,
-      new Date().toISOString(),
-      id,
-      userId,
-    )
-    .run();
+  if (plan) checkPlan(plan, sale.salePriceCents, sale.soldAt);
+  // Editing a sale keeps what was already received, matched by installment number.
+  const paid = new Map(
+    (
+      await all<{ number: number; paid_at: string | null }>(
+        db,
+        "SELECT number,paid_at FROM sale_installments WHERE user_id=? AND item_id=?",
+        userId,
+        id,
+      )
+    ).map((r) => [r.number, r.paid_at]),
+  );
+  const now = new Date().toISOString();
+  const rows = plan
+    ? [
+        ...(plan.downPaymentCents > 0
+          ? [{ number: 0, amountCents: plan.downPaymentCents, dueDate: sale.soldAt, paidAt: sale.soldAt }]
+          : []),
+        ...plan.installments.map((p, k) => ({ ...p, number: k + 1, paidAt: paid.get(k + 1) ?? null })),
+      ]
+    : [];
+  await db.batch([
+    db
+      .prepare(
+        "UPDATE inventory_items SET status='sold',sale_price_cents=?,sale_fees_cents=?,sold_at=?,sale_channel=?,sold_to=?,version=version+1,updated_at=? WHERE id=? AND user_id=?",
+      )
+      .bind(sale.salePriceCents, sale.saleFeesCents, sale.soldAt, sale.saleChannel, sale.soldTo, now, id, userId),
+    db.prepare("DELETE FROM sale_installments WHERE user_id=? AND item_id=?").bind(userId, id),
+    ...rows.map((r) =>
+      db
+        .prepare(
+          "INSERT INTO sale_installments (id,user_id,item_id,number,amount_cents,due_date,paid_at,created_at) VALUES (?,?,?,?,?,?,?,?)",
+        )
+        .bind(uid(), userId, id, r.number, r.amountCents, r.dueDate, r.paidAt, now),
+    ),
+  ]);
   return getItem(db, userId, id);
+}
+
+function checkPlan(plan: z.infer<typeof planSchema>, salePriceCents: number, soldAt: string) {
+  const total = plan.downPaymentCents + plan.installments.reduce((t, p) => t + p.amountCents, 0);
+  if (total !== salePriceCents)
+    throw new HttpError(
+      422,
+      `A entrada e as parcelas somam ${formatCents(total)}, mas a venda foi de ${formatCents(salePriceCents)}.`,
+    );
+  plan.installments.forEach((p, k) => {
+    if (p.dueDate < soldAt) throw new HttpError(422, `A parcela ${k + 1} vence antes da data da venda.`);
+  });
+}
+
+/** Marks one installment as received (on `paidAt`, default today) or back to open. */
+export async function payInstallment(
+  db: Database,
+  userId: string,
+  itemId: string,
+  installmentId: string,
+  input: unknown,
+) {
+  const { paid, paidAt } = z
+    .object({ paid: z.boolean(), paidAt: date.optional() })
+    .strict()
+    .parse(input);
+  const row = await db
+    .prepare("SELECT number FROM sale_installments WHERE id=? AND user_id=? AND item_id=?")
+    .bind(installmentId, userId, itemId)
+    .first<{ number: number }>();
+  if (!row) throw new HttpError(404, "Parcela não encontrada.");
+  if (row.number === 0) throw new HttpError(422, "A entrada é recebida no dia da venda.");
+  await db.batch([
+    db
+      .prepare("UPDATE sale_installments SET paid_at=? WHERE id=? AND user_id=?")
+      .bind(paid ? (paidAt ?? today()) : null, installmentId, userId),
+    db.prepare("UPDATE inventory_items SET updated_at=? WHERE id=? AND user_id=?").bind(new Date().toISOString(), itemId, userId),
+  ]);
+  return getItem(db, userId, itemId);
 }
 
 export async function unsellItem(db: Database, userId: string, id: string) {
   await itemRow(db, userId, id);
-  await db
-    .prepare(
-      "UPDATE inventory_items SET status='listed',sale_price_cents=NULL,sale_fees_cents=0,sold_at=NULL,sale_channel=NULL,sold_to=NULL,version=version+1,updated_at=? WHERE id=? AND user_id=?",
-    )
-    .bind(new Date().toISOString(), id, userId)
-    .run();
+  await db.batch([
+    db
+      .prepare(
+        "UPDATE inventory_items SET status='listed',sale_price_cents=NULL,sale_fees_cents=0,sold_at=NULL,sale_channel=NULL,sold_to=NULL,version=version+1,updated_at=? WHERE id=? AND user_id=?",
+      )
+      .bind(new Date().toISOString(), id, userId),
+    db.prepare("DELETE FROM sale_installments WHERE user_id=? AND item_id=?").bind(userId, id),
+  ]);
   return getItem(db, userId, id);
+}
+
+const installmentState = (dueDate: string, paidAt: string | null, today: string) =>
+  paidAt ? "paid" : dueDate < today ? "overdue" : dueDate === today ? "today" : "open";
+
+/** Open installments (or recently received) across all sales, oldest due first. */
+export async function listReceivables(db: Database, userId: string, query: unknown) {
+  const { status } = z
+    .object({ status: z.enum(["open", "overdue", "paid"]).default("open") })
+    .strict()
+    .parse(query);
+  const t = today();
+  const rows = await all<{
+    id: string;
+    item_id: string;
+    number: number;
+    amount_cents: number;
+    due_date: string;
+    paid_at: string | null;
+    name: string;
+    category: Category;
+    sold_to: string | null;
+    sold_at: string;
+    cover_photo_id: string | null;
+    total: number;
+  }>(
+    db,
+    `SELECT s.id,s.item_id,s.number,s.amount_cents,s.due_date,s.paid_at,i.name,i.category,i.sold_to,i.sold_at,
+       (SELECT p.id FROM inventory_photos p WHERE p.user_id=i.user_id AND p.item_id=i.id ORDER BY p.position,p.created_at LIMIT 1) AS cover_photo_id,
+       (SELECT COUNT(*) FROM sale_installments x WHERE x.user_id=s.user_id AND x.item_id=s.item_id AND x.number>0) AS total
+     FROM sale_installments s JOIN inventory_items i ON i.id=s.item_id AND i.user_id=s.user_id
+     WHERE s.user_id=? AND s.number>0 AND ${status === "paid" ? "s.paid_at IS NOT NULL" : "s.paid_at IS NULL"}
+       ${status === "overdue" ? "AND s.due_date<?" : ""}
+     ORDER BY ${status === "paid" ? "s.paid_at DESC" : "s.due_date"},s.number LIMIT 300`,
+    userId,
+    ...(status === "overdue" ? [t] : []),
+  );
+  return {
+    installments: rows.map((r) => ({
+      id: r.id,
+      itemId: r.item_id,
+      number: r.number,
+      of: Number(r.total),
+      amountCents: r.amount_cents,
+      dueDate: r.due_date,
+      paidAt: r.paid_at,
+      state: installmentState(r.due_date, r.paid_at, t),
+      name: r.name,
+      category: r.category,
+      soldTo: r.sold_to,
+      soldAt: r.sold_at,
+      coverPhotoId: r.cover_photo_id,
+    })),
+    totals: await receivableTotals(db, userId),
+  };
+}
+
+/** What customers still owe: total, overdue and the next installment due. */
+export async function receivableTotals(db: Database, userId: string) {
+  const t = today();
+  const month = t.slice(0, 7);
+  const sum = await db
+    .prepare(
+      `SELECT COALESCE(SUM(CASE WHEN paid_at IS NULL THEN amount_cents END),0) AS open_cents,
+        COUNT(CASE WHEN paid_at IS NULL THEN 1 END) AS open_count,
+        COALESCE(SUM(CASE WHEN paid_at IS NULL AND due_date<? THEN amount_cents END),0) AS overdue_cents,
+        COUNT(CASE WHEN paid_at IS NULL AND due_date<? THEN 1 END) AS overdue_count,
+        COALESCE(SUM(CASE WHEN paid_at IS NULL AND substr(due_date,1,7)=? THEN amount_cents END),0) AS month_cents,
+        COALESCE(SUM(CASE WHEN number>0 AND substr(paid_at,1,7)=? THEN amount_cents END),0) AS received_month_cents
+       FROM sale_installments WHERE user_id=?`,
+    )
+    .bind(t, t, month, month, userId)
+    .first<{
+      open_cents: number;
+      open_count: number;
+      overdue_cents: number;
+      overdue_count: number;
+      month_cents: number;
+      received_month_cents: number;
+    }>();
+  return {
+    openCents: Number(sum?.open_cents ?? 0),
+    openCount: Number(sum?.open_count ?? 0),
+    overdueCents: Number(sum?.overdue_cents ?? 0),
+    overdueCount: Number(sum?.overdue_count ?? 0),
+    dueThisMonthCents: Number(sum?.month_cents ?? 0),
+    receivedThisMonthCents: Number(sum?.received_month_cents ?? 0),
+  };
 }
 
 export async function deleteItem(
@@ -709,11 +903,14 @@ export async function deleteItem(
       id,
     )
   ).map((r) => r.object_key);
-  // Costs and photos go explicitly: the rows must vanish even where foreign
-  // keys are off. A failed media delete leaves an orphan file, not a broken item.
+  // Costs, installments and photos go explicitly: the rows must vanish even where
+  // foreign keys are off. A failed media delete leaves an orphan file, not a broken item.
   await db.batch([
     db
       .prepare("DELETE FROM inventory_costs WHERE user_id=? AND item_id=?")
+      .bind(userId, id),
+    db
+      .prepare("DELETE FROM sale_installments WHERE user_id=? AND item_id=?")
       .bind(userId, id),
     db
       .prepare("DELETE FROM inventory_photos WHERE user_id=? AND item_id=?")
@@ -957,12 +1154,13 @@ export async function inventorySummary(
   period: string | null,
 ) {
   const p = z.enum(PERIODS).default("month").parse(period ?? undefined);
-  const [rows, prefs] = await Promise.all([
+  const [rows, prefs, receivables] = await Promise.all([
     itemRows(db, userId),
     getPreferences(db, userId),
+    receivableTotals(db, userId),
   ]);
   const t = today();
-  return summarize(
+  const summary = summarize(
     rows.map((r) => {
       const i = present(r, t);
       return {
@@ -987,7 +1185,9 @@ export async function inventorySummary(
       staleAfterDays: prefs.staleAfterDays,
     },
   );
+  return { ...summary, receivables };
 }
+export type InventorySummary = Awaited<ReturnType<typeof inventorySummary>>;
 
 export const csvMoney = (c: number | null) =>
   c == null ? "" : (c / 100).toFixed(2).replace(".", ",");
@@ -1035,6 +1235,8 @@ export async function exportCsv(db: Database, userId: string) {
     "Taxas da venda",
     "Lucro",
     "Margem %",
+    "Pagamento",
+    "A receber",
     "Dias em estoque",
     "Observações",
   ];
@@ -1059,6 +1261,8 @@ export async function exportCsv(db: Database, userId: string) {
       i.status === "sold" ? money(i.saleFeesCents) : "",
       money(i.figures.profitCents),
       i.figures.marginPct == null ? "" : String(i.figures.marginPct).replace(".", ","),
+      i.status !== "sold" ? "" : i.installmentCount ? `Parcelado em ${i.installmentCount}x` : "À vista",
+      i.receivableCents ? money(i.receivableCents) : "",
       i.figures.days,
       i.notes,
     ]);

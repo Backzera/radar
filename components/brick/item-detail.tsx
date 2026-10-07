@@ -33,6 +33,16 @@ import { compressPhoto, confetti } from "./media";
 import { Drawer, Field, Modal, MoneyInput, Photo, Spinner, StatusBadge, useToast } from "./ui";
 import type { ItemDetail } from "./types";
 import {
+  InstallmentsSection,
+  PlanEditor,
+  newPlan,
+  planFromItem,
+  planGap,
+  planPayload,
+  splitPlan,
+  type PlanDraft,
+} from "./installments";
+import {
   QuantityInput,
   UnitsEditor,
   blankUnit,
@@ -64,6 +74,9 @@ function SellModal({
   const [soldAt, setSoldAt] = useState(item.soldAt ?? todayIn());
   const [channel, setChannel] = useState<Channel>(item.saleChannel ?? item.purchaseChannel);
   const [buyer, setBuyer] = useState(item.soldTo ?? "");
+  const existing = planFromItem(item);
+  const [credit, setCredit] = useState(!!existing);
+  const [plan, setPlan] = useState<PlanDraft>(() => existing ?? newPlan(price, soldAt));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const button = useRef<HTMLButtonElement | null>(null);
@@ -71,9 +84,18 @@ function SellModal({
   const profit = price === null ? null : price - (fees ?? 0) - invested;
   const discount =
     price !== null && item.askingPriceCents && price < item.askingPriceCents ? item.askingPriceCents - price : null;
+  const changePrice = (v: number | null) => {
+    setPrice(v);
+    // A new price splits the installments again over the same plan.
+    if (credit) setPlan((p) => splitPlan(v, p));
+  };
   const submit = async () => {
     if (!price) {
       setErrors({ salePriceCents: "Informe o valor da venda." });
+      return;
+    }
+    if (credit && planGap(price, plan) !== 0) {
+      toast({ tone: "error", title: "As parcelas não fecham", description: "A entrada mais as parcelas precisam somar o valor da venda." });
       return;
     }
     setBusy(true);
@@ -85,6 +107,7 @@ function SellModal({
           soldAt,
           saleChannel: channel,
           soldTo: buyer.trim() || null,
+          ...(credit ? { plan: planPayload(plan) } : {}),
         },
       });
       const rect = button.current?.getBoundingClientRect();
@@ -121,7 +144,7 @@ function SellModal({
     >
       <div className="form-grid">
         <Field label="Valor da venda" error={errors.salePriceCents}>
-          {(id) => <MoneyInput id={id} autoFocus value={price} invalid={!!errors.salePriceCents} onChange={setPrice} />}
+          {(id) => <MoneyInput id={id} autoFocus value={price} invalid={!!errors.salePriceCents} onChange={changePrice} />}
         </Field>
         <Field label="Taxas" hint="Comissão, maquininha, frete pago por você.">
           {(id) => <MoneyInput id={id} value={fees} onChange={setFees} />}
@@ -142,10 +165,30 @@ function SellModal({
             </select>
           )}
         </Field>
-        <Field label="Cliente" className="full" hint="Quem comprou. Opcional, para seu controle.">
+        <Field
+          label="Cliente"
+          className="full"
+          hint={credit ? "No crediário, vale colocar o nome para cobrar as parcelas." : "Quem comprou. Opcional, para seu controle."}
+        >
           {(id) => <input id={id} className="input" value={buyer} onChange={(e) => setBuyer(e.target.value)} />}
         </Field>
       </div>
+      <div className="segmented pay-mode" role="group" aria-label="Forma de pagamento">
+        <button type="button" aria-pressed={!credit} onClick={() => setCredit(false)}>
+          À vista
+        </button>
+        <button
+          type="button"
+          aria-pressed={credit}
+          onClick={() => {
+            setCredit(true);
+            setPlan((p) => (planGap(price, p) === 0 ? p : splitPlan(price, p)));
+          }}
+        >
+          Parcelado (crediário)
+        </button>
+      </div>
+      {credit && <PlanEditor priceCents={price} soldAt={soldAt} plan={plan} onChange={setPlan} />}
       <div className={`callout ${profit !== null && profit < 0 ? "loss" : ""}`}>
         <span>
           Investido {formatCents(invested)}
@@ -483,7 +526,7 @@ export function ItemDetailDrawer({
         onClose={onClose}
         wide
         title={item ? (item.group ? `Unidade ${item.group.position} de ${item.group.units}` : "Produto") : "Carregando…"}
-        subtitle={item ? `Cadastrado em ${dateText(item.createdAt.slice(0, 10))}` : undefined}
+        subtitle={item ? `Cadastrado em ${dateText(todayIn(new Date(item.createdAt)))}` : undefined}
         footer={
           item ? (
             <>
@@ -677,6 +720,8 @@ export function ItemDetailDrawer({
                 </strong>
               </div>
             </div>
+
+            <InstallmentsSection item={item} onChange={update} />
 
             <UnitsSection
               item={item}

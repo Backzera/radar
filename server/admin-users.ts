@@ -24,6 +24,7 @@ const USER_TABLES = [
   "deal_pipeline",
   "availability_checks",
   "inventory_costs",
+  "sale_installments",
   "inventory_photos",
   "inventory_items",
   "brick_preferences",
