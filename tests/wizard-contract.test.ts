@@ -52,7 +52,7 @@ test("2.0 assistente: etapas renderizam orçamento e ativação sem campo de ali
       { kind: "user", userId: "u1", admin: false },
       { COLLECTION_ENABLED: "false" },
     );
-    for (const step of [0, 1, 2, 3]) {
+    for (const step of [0, 1, 2]) {
       const html = renderToStaticMarkup(
         createElement(SearchWizard, {
           bootstrap: b,
@@ -70,11 +70,12 @@ test("2.0 assistente: etapas renderizam orçamento e ativação sem campo de ali
           onSaved() {},
         }),
       );
+      // Sem termos técnicos nem opções avançadas no fluxo simples do cliente.
       assert.doesNotMatch(
         html,
-        /nomes alternativos.*v[ií]rgula|P25|baseline|Opportunity Score/i,
+        /nomes alternativos.*v[ií]rgula|P25|baseline|Opportunity Score|op[çc][õo]es avan[çc]adas|Intervalo solicitado|Pontua[çc][ãa]o m[íi]nima/i,
       );
-      if (step === 3) assert.match(html, /Ativar radar e buscar/);
+      if (step === 2) assert.match(html, /Ativar radar e avisar/);
     }
   } finally {
     sql.close();

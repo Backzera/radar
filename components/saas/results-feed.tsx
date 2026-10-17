@@ -281,12 +281,14 @@ export function ResultsFeed({
                   <ListingImage o={o} />
                   <div className="saas-card-content">
                     <div className="saas-card-tags">
-                      <span className="saas-badge">
+                      <span
+                        className={`saas-badge ${a.event !== "baseline" ? "new" : ""}`}
+                      >
                         {a.event === "baseline"
                           ? "Busca inicial"
                           : a.event === "price_drop"
-                            ? "Queda observada"
-                            : "Encontrado pelo radar"}
+                            ? "Queda de preço"
+                            : "Novo no radar"}
                       </span>
                       <span
                         className={`saas-badge ${a.budgetEligible ? "positive" : ""}`}
