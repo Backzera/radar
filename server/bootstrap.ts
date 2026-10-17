@@ -102,7 +102,10 @@ export async function bootstrap(
   const activeRadars = monitors.filter((m) => m.active && !m.archived).length;
   const pilot = pilotConfig(config),
     setup = providerSetup(config, development),
-    ready = setup.ready && !!contract;
+    // A fonte própria (scraper) fica pronta assim que o SCRAPER_URL está
+    // configurado — não exige a validação manual da administração (que era um
+    // resquício do contrato pago da Bright Data).
+    ready = setup.ready;
   const collectionEnabled = config.COLLECTION_ENABLED === "true",
     workerHealthy =
       !!heartbeat && Date.now() - Date.parse(heartbeat.seen_at) < 120000;

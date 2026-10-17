@@ -132,9 +132,10 @@ if (-not (Saude)) {
 }
 Write-Host "Scraper no ar em http://127.0.0.1:8000" -ForegroundColor Green
 
-Passo "6/6 Apontar o app para o scraper (SCRAPER_URL) e religar o app"
+Passo "6/6 Apontar o app para o scraper e LIGAR a coleta, depois religar o app"
 Gravar-Env $AppEnv "SCRAPER_URL" "http://127.0.0.1:8000"
-Write-Host "SCRAPER_URL=http://127.0.0.1:8000 gravado em $AppEnv"
+Gravar-Env $AppEnv "COLLECTION_ENABLED" "true"
+Write-Host "SCRAPER_URL e COLLECTION_ENABLED=true gravados em $AppEnv"
 if (Get-ScheduledTask -TaskName $NomeTarefaApp -ErrorAction SilentlyContinue) {
     Stop-ScheduledTask -TaskName $NomeTarefaApp -ErrorAction SilentlyContinue
     Start-Sleep 2
