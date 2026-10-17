@@ -24,6 +24,7 @@ import {
   type Database,
 } from "./store";
 import { providerBudgetKey, type PilotConfig } from "./pilot";
+import { UNLIMITED_DAILY_TRIGGERS } from "../core/limits";
 import { monitorSchema } from "./validation";
 import { jobLease, LeaseLost } from "./job-lease";
 export interface Job {
@@ -56,7 +57,7 @@ interface Options {
 }
 const defaults: PilotConfig = {
   pilot: true,
-  maxDailyTriggers: 5,
+  maxDailyTriggers: UNLIMITED_DAILY_TRIGGERS,
   maxRecords: 10,
   externalAlerts: false,
 };

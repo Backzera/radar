@@ -1,6 +1,7 @@
 import { type Database, all, uid } from "./store";
 import { getAccount } from "./accounts";
 import { plannedInterval } from "../core/service-schedule";
+import { UNLIMITED_DAILY_TRIGGERS } from "../core/limits";
 import { runAvailabilityCheck, queueSelectiveCheck } from "./availability";
 import { processActivations } from "./activations";
 import { sharedContract } from "./bootstrap";
@@ -92,7 +93,8 @@ export async function runSchedulerTick(
       const result = await runOne(db, row.user_id, factory, {
         ...pilot,
         externalAlerts: external,
-        tenantMaxDailyTriggers: a.daily_triggers,
+        // Uso ilimitado: sem teto diário de buscas por conta.
+        tenantMaxDailyTriggers: UNLIMITED_DAILY_TRIGGERS,
         minInterval: plannedInterval(
           a.min_interval,
           a.min_interval,

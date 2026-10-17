@@ -2,6 +2,7 @@ import { z } from "zod";
 import { all, uid, type Database } from "./store";
 import { ensureUser } from "./seed";
 import { providerBudgetKey } from "./pilot";
+import { UNLIMITED_DAILY_TRIGGERS } from "../core/limits";
 export interface Account {
   user_id: string;
   status: "active" | "canceled";
@@ -44,7 +45,8 @@ export async function accountView(db: Database, userId: string) {
       name: a.name,
       maxActive: a.max_active,
       minInterval: a.min_interval,
-      dailyTriggers: a.daily_triggers,
+      // Uso ilimitado: sem teto diário de buscas por conta.
+      dailyTriggers: UNLIMITED_DAILY_TRIGGERS,
       telegram: !!a.telegram,
     },
     usedToday: used?.count ?? 0,

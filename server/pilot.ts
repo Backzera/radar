@@ -1,3 +1,4 @@
+import { UNLIMITED_DAILY_TRIGGERS } from "../core/limits";
 export interface PilotConfig {
   tenantMaxDailyTriggers?: number;
   minInterval?: number;
@@ -17,10 +18,12 @@ export function pilotConfig(
       : defaultValue;
   return {
     pilot,
+    // Sem limite de uso por padrão: o usuário busca quantas vezes quiser.
+    // Um administrador pode reintroduzir um teto via MAX_DAILY_PROVIDER_TRIGGERS.
     maxDailyTriggers: number(
       env.MAX_DAILY_PROVIDER_TRIGGERS,
-      pilot ? 5 : 50,
-      pilot ? 5 : 100,
+      UNLIMITED_DAILY_TRIGGERS,
+      UNLIMITED_DAILY_TRIGGERS,
     ),
     maxRecords: number(env.BRIGHTDATA_MAX_RECORDS_PER_TRIGGER, 10, 100),
     externalAlerts: env.EXTERNAL_ALERTS_ENABLED === "true",

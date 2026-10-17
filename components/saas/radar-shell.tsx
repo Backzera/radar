@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { Bootstrap } from "../../server/bootstrap";
 import type { Monitor } from "../../core/types";
+import { isUnlimitedTriggers } from "../../core/limits";
 import { useResource, request, errorText } from "./client";
 import { SearchWizard, type Draft } from "./search-wizard";
 import { SearchList } from "./search-list";
@@ -274,19 +275,18 @@ export function RadarShell({ embedded = false }: { embedded?: boolean } = {}) {
                         : "es ativos"}
                     </strong>
                     <p>
-                      {data.account.usedToday} de{" "}
-                      {data.account.plan.dailyTriggers} pesquisas usadas hoje
+                      {isUnlimitedTriggers(data.account.plan.dailyTriggers)
+                        ? "Buscas ilimitadas"
+                        : `${data.account.usedToday} de ${data.account.plan.dailyTriggers} pesquisas usadas hoje`}
                     </p>
                     <small>
                       {!data.service.ready || !data.service.collectionEnabled
                         ? "Aguardando configuração do serviço"
                         : data.service.quotaPaused
                           ? "Cota de hoje atingida"
-                          : data.service.pilot
-                            ? "Primeira busca automática · atualizações manuais"
-                            : data.service.workerHealthy
-                              ? "Acompanhamento ativo"
-                              : "O serviço precisa de atenção"}
+                          : data.service.workerHealthy
+                            ? "Acompanhamento ativo"
+                            : "Pronto para buscar quando você quiser"}
                     </small>
                   </div>
                 </section>

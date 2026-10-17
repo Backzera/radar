@@ -162,11 +162,13 @@ test("hotfix: Buscar agora conclui de forma síncrona e o anúncio aparece no fe
   }
 });
 
-test("hotfix: nova solicitação não duplica coleta e a cota esgotada bloqueia o scan", async () => {
+test("hotfix: nova solicitação não duplica coleta e não há limite diário de buscas", async () => {
   const f = await harness();
   try {
+    // Mesmo com um plano de daily_triggers=1, o uso é ilimitado.
     f.sql.prepare("UPDATE plans SET daily_triggers=1 WHERE id='managed'").run();
     assert.equal((await f.scan()).status, 202);
+    // Enquanto uma coleta está pendente, uma nova solicitação não duplica.
     const replay = await f.scan();
     const reply = (await replay.json()) as { queued: number; message: string };
     assert.equal(reply.queued, 0);
@@ -183,19 +185,21 @@ test("hotfix: nova solicitação não duplica coleta e a cota esgotada bloqueia 
       1,
     );
 
+    // Uso ilimitado: mesmo após uma coleta hoje e com daily_triggers=1, a cota
+    // não pausa e uma nova busca é aceita e executada (sem limite diário).
     const b = await bootstrap(
       f.db,
       { kind: "user", userId: "local-radar", admin: true },
       cfg,
       true,
     );
-    assert.equal(b.service.quotaPaused, true);
-    // Com a cota esgotada, uma nova solicitação é recusada (sem nova coleta).
-    const blocked = await f.scan();
-    assert.equal(blocked.status, 429);
+    assert.equal(b.service.quotaPaused, false);
+    const again = await f.scan();
+    assert.equal(again.status, 202);
+    await f.tick();
     assert.equal(
       f.net.calls.filter((c) => c.path.endsWith("/search")).length,
-      1,
+      2,
     );
   } finally {
     f.sql.close();
