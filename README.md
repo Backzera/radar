@@ -1,6 +1,10 @@
-# Market Radar
+# Ágio
 
-SaaS de controle de estoque e lucro para quem faz brick (compra e revenda de usados). O radar de oportunidades do Marketplace aparece como "Em breve": o código de coleta continua no projeto para uma próxima versão.
+SaaS de controle de estoque e lucro para quem faz brick (compra e revenda de usados), com radar de oportunidades do Marketplace integrado ao painel (aba Radar, ligado por `FEATURES.radar` em `components/brick/brand.ts`).
+
+## Design
+
+Identidade "obsidian + volt": fundo grafite profundo, um único acento elétrico (`--brand`), rótulos em mono, cantos HUD e efeitos de luz que seguem o cursor. Tudo é token em `app/globals.css`; `app/app.css` cobre o aplicativo, `app/landing.css` a landing e o login, `app/saas.css` o radar (escopado em `.saas`). No app: paleta de comandos com `⌘K`/`Ctrl K`, `⌘N` para novo produto e `⌘1`–`⌘5` para trocar de tela.
 
 ## O que o app faz
 
@@ -20,7 +24,7 @@ SaaS de controle de estoque e lucro para quem faz brick (compra e revenda de usa
 |---|---|
 | `/` | Landing com recursos, planos e perguntas |
 | `/cadastro`, `/entrar` | Criar conta e entrar |
-| `/app` | Aplicativo (painel, estoque, vendas, radar em breve, conta) |
+| `/app` | Aplicativo (painel, estoque, vendas, radar, conta) |
 | `/api/v1/...` | API: `auth/*`, `inventory/*`, `media/:id`, `brick/preferences` |
 
 ## Rodar no seu computador
@@ -45,10 +49,10 @@ Gera `release/brique-windows.zip`: o app como servidor Node.js (banco SQLite em 
 
 ## Estrutura
 
-- `components/brick/`: interface do SaaS (landing, login, shell, painel, estoque, vendas, conta, gráficos).
+- `components/brick/`: interface do SaaS (landing, login, shell com paleta de comandos, painel, estoque, vendas, conta, gráficos).
 - `core/brick.ts`: regras e contas do brick, usadas pelo servidor e pela interface.
 - `server/auth.ts`, `server/inventory.ts`, `server/inventory-routes.ts`: login, estoque e fotos.
-- Radar (desligado na interface por `FEATURES.radar` em `components/brick/brand.ts`): `providers/`, `server/worker.ts`, `server/supervisor.ts`, `components/saas/`.
+- Radar (ligado por `FEATURES.radar` em `components/brick/brand.ts`; dentro do app ele usa abas em vez de uma segunda barra lateral): `providers/`, `server/worker.ts`, `server/supervisor.ts`, `components/saas/`.
 
 ## Verificação
 

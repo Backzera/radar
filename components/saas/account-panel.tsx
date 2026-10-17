@@ -202,7 +202,7 @@ export function AccountPanel({
               );
               const link = document.createElement("a");
               link.href = url;
-              link.download = "meus-dados-market-radar.json";
+              link.download = "meus-dados-agio.json";
               link.click();
               setTimeout(() => URL.revokeObjectURL(url), 1000);
               setNotice("Exportação concluída.");

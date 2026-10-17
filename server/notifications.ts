@@ -31,7 +31,7 @@ export class TelegramChannel implements NotificationChannel {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chat_id: this.chatId,
-          text: `MARKET RADAR
+          text: `ÁGIO · RADAR
 ${alert.title}
 Preço: ${money(alert.price)} · seu limite: ${money(alert.maxPurchase)}
 Revenda considerada: ${money(alert.expectedSale)}

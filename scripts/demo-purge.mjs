@@ -174,7 +174,7 @@ export async function runPurge(root = process.cwd(), apply = false) {
   });
   if (matching.length !== 1)
     throw new Error(
-      "Esperado exatamente um banco local MARKET RADAR; nenhum banco alterado.",
+      "Esperado exatamente um banco local do Ágio; nenhum banco alterado.",
     );
   const db = new DatabaseSync(matching[0]);
   db.exec("PRAGMA busy_timeout=10000");

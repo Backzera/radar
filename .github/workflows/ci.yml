@@ -1,4 +1,4 @@
-name: Validate Market Radar
+name: Validate Ágio
 on:
   pull_request:
   push:

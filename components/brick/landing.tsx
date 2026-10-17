@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   ArrowRight,
   BarChart3,
+  Bell,
   Camera,
   Check,
   Clock,
@@ -20,39 +21,6 @@ import { Logo } from "./logo";
 import { BRAND, PLANS } from "./brand";
 import { CATEGORY_ICONS, CountUp, Reveal } from "./ui";
 import { withBase } from "./base";
-
-const FEATURES_LIST = [
-  {
-    icon: Camera,
-    title: "Estoque com fotos",
-    text: "Cada produto com foto, estado, IMEI e etapa: comprado, em preparação, anunciado, reservado ou vendido.",
-  },
-  {
-    icon: Wallet,
-    title: "Lucro de verdade",
-    text: "Conserto, peças, frete e taxas entram na conta. Você vê quanto sobrou, não só a diferença de preço.",
-  },
-  {
-    icon: BarChart3,
-    title: "Painel do mês",
-    text: "Lucro, faturamento, margem e ROI por período, comparados com o período anterior.",
-  },
-  {
-    icon: Clock,
-    title: "Giro do estoque",
-    text: "Quantos dias cada produto ficou parado e quais estão travando seu dinheiro.",
-  },
-  {
-    icon: Target,
-    title: "Metas mensais",
-    text: "Defina quanto quer lucrar no mês e acompanhe o progresso a cada venda.",
-  },
-  {
-    icon: FileSpreadsheet,
-    title: "Planilha num clique",
-    text: "Exporte tudo para o Excel ou Google Planilhas quando quiser.",
-  },
-];
 
 function useScrolled() {
   const [scrolled, setScrolled] = useState(false);
@@ -118,9 +86,86 @@ function HeroMock() {
           <div className="meter-fill" style={{ width: "72%", animationDelay: "0.8s" }} />
         </div>
       </div>
+      <div className="mock-radar">
+        <span className="blip" style={{ left: "62%", top: "28%", animationDelay: "0.3s" }} />
+        <span className="blip" style={{ left: "32%", top: "58%", animationDelay: "1.6s" }} />
+        <span className="blip" style={{ left: "70%", top: "70%", animationDelay: "2.7s" }} />
+      </div>
     </div>
   );
 }
+
+const FEATURES_LIST = [
+  {
+    icon: Wallet,
+    title: "Lucro de verdade, não diferença de preço",
+    text: "Conserto, peças, frete e taxas entram na conta. Você vê quanto sobrou em cada venda, com margem, ROI e dias até vender.",
+    span: "wide",
+    art: (
+      <div className="feature-art">
+        <div className="feature-code">
+          {"venda        "}
+          <b>R$ 2.050,00</b>
+          {"\n- compra     R$ 1.500,00\n- bateria    R$   120,00\n- taxas      R$    30,00\n"}
+          <i>────────────────────────</i>
+          {"\nlucro        "}
+          <b>+R$ 400,00</b>
+          {"   "}
+          <i>margem 19,5% · 9 dias</i>
+        </div>
+      </div>
+    ),
+  },
+  {
+    icon: Camera,
+    title: "Estoque com fotos",
+    text: "Cada produto com foto, estado, IMEI e etapa, do momento em que entra até a venda.",
+    span: "",
+    art: (
+      <div className="feature-art">
+        <div className="feature-stages">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <span key={i} style={{ "--i": i } as React.CSSProperties} />
+          ))}
+        </div>
+        <small>Comprado → preparo → anunciado → reservado → vendido</small>
+      </div>
+    ),
+  },
+  {
+    icon: Target,
+    title: "Metas mensais",
+    text: "Defina quanto quer lucrar e acompanhe o progresso a cada venda.",
+    span: "wide",
+    art: (
+      <div className="feature-art feature-ring">
+        <div className="ring">72%</div>
+        <div>
+          <small>Meta do mês</small>
+          <strong>R$ 3.600 de R$ 5.000</strong>
+        </div>
+      </div>
+    ),
+  },
+  {
+    icon: BarChart3,
+    title: "Painel do mês",
+    text: "Lucro, faturamento, margem e ROI por período, comparados com o período anterior.",
+    span: "",
+  },
+  {
+    icon: Clock,
+    title: "Giro do estoque",
+    text: "Quantos dias cada produto ficou parado e quais estão travando seu dinheiro.",
+    span: "",
+  },
+  {
+    icon: FileSpreadsheet,
+    title: "Planilha num clique",
+    text: "Exporte tudo para o Excel ou Google Planilhas quando quiser.",
+    span: "wide",
+  },
+] as const;
 
 export function Landing() {
   const scrolled = useScrolled();
@@ -133,6 +178,7 @@ export function Landing() {
           <nav className="lp-links" aria-label="Seções">
             <a href="#recursos">Recursos</a>
             <a href="#como-funciona">Como funciona</a>
+            <a href="#radar">Radar</a>
             <a href="#planos">Planos</a>
             <a href="#duvidas">Dúvidas</a>
           </nav>
@@ -152,16 +198,17 @@ export function Landing() {
           <div>
             <a className="lp-pill fade-up" href="#radar">
               <span className="badge soon">
-                <Zap size={12} /> Em breve
+                <Zap size={12} /> Novo
               </span>
               Radar de oportunidades do Marketplace
             </a>
             <h1 className="fade-up" style={{ "--i": 1 } as React.CSSProperties}>
-              Seu brick no controle. <span className="gradient-text">Lucro de verdade</span> em cada venda.
+              O sistema operacional de quem{" "}
+              <span className="gradient-text">compra e revende</span>.
             </h1>
             <p className="lead fade-up" style={{ "--i": 2 } as React.CSSProperties}>
-              {BRAND.name} é o painel de quem compra e revende usados: estoque com fotos, custos, vendas, margem e metas.
-              Você vê para onde vai cada real.
+              {BRAND.name} é o painel do bricker: estoque com fotos, custos reais, vendas, margem, metas e um radar
+              que avisa quando aparece um anúncio abaixo do preço. Você vê para onde vai cada real.
             </p>
             <div className="lp-cta fade-up" style={{ "--i": 3 } as React.CSSProperties}>
               <a className="btn btn-primary btn-lg" href={withBase("/cadastro")}>
@@ -173,10 +220,13 @@ export function Landing() {
             </div>
             <div className="lp-trust fade-up" style={{ "--i": 4 } as React.CSSProperties}>
               <span>
-                <Smartphone size={15} /> Funciona no celular e no computador
+                <Smartphone size={15} /> Celular e computador
               </span>
               <span>
                 <ShieldCheck size={15} /> Seus dados só seus
+              </span>
+              <span>
+                <Zap size={15} /> Conta pronta em 1 minuto
               </span>
             </div>
           </div>
@@ -191,12 +241,35 @@ export function Landing() {
               const Icon = CATEGORY_ICONS[c];
               return (
                 <span key={i} aria-hidden={i >= categories.length || undefined}>
-                  <Icon size={18} /> {CATEGORY_LABELS[c]}
+                  <Icon size={16} /> {CATEGORY_LABELS[c]}
                 </span>
               );
             })}
           </div>
         </div>
+
+        <section className="lp-container" style={{ paddingTop: 48 }}>
+          <Reveal>
+            <div className="proof">
+              <div>
+                <strong>100%</strong>
+                <span>dos custos na conta: compra, conserto, frete e taxas</span>
+              </div>
+              <div>
+                <strong>12 meses</strong>
+                <span>de lucro, mês a mês, no painel</span>
+              </div>
+              <div>
+                <strong>5 etapas</strong>
+                <span>do produto, da compra à venda</span>
+              </div>
+              <div>
+                <strong>0 planilhas</strong>
+                <span>para manter. Exporte quando quiser</span>
+              </div>
+            </div>
+          </Reveal>
+        </section>
 
         <section className="lp-section lp-container" id="recursos">
           <Reveal className="lp-section-head">
@@ -205,41 +278,19 @@ export function Landing() {
             <p>Do momento em que você compra até o dinheiro entrar, cada etapa fica registrada e somada.</p>
           </Reveal>
           <div className="features">
-            {FEATURES_LIST.map(({ icon: Icon, title, text }, i) => (
-              <Reveal key={title} delay={i % 3}>
-                <article
-                  className="card hoverable feature"
-                  onPointerMove={(e) => {
-                    const r = e.currentTarget.getBoundingClientRect();
-                    e.currentTarget.style.setProperty("--mx", `${e.clientX - r.left}px`);
-                    e.currentTarget.style.setProperty("--my", `${e.clientY - r.top}px`);
-                  }}
-                >
+            {FEATURES_LIST.map(({ icon: Icon, title, text, span, ...rest }, i) => (
+              <Reveal key={title} delay={i % 3} className={`feature-cell ${span}`} as="article">
+                <div className={`card hoverable feature ${span}`} style={{ height: "100%" }}>
                   <span className="feature-icon">
-                    <Icon size={22} />
+                    <Icon size={21} />
                   </span>
                   <h3>{title}</h3>
                   <p>{text}</p>
-                </article>
+                  {"art" in rest ? rest.art : null}
+                </div>
               </Reveal>
             ))}
           </div>
-          <Reveal>
-            <article id="radar" className="card feature gradient-border" style={{ marginTop: 18, display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap" }}>
-              <span className="feature-icon">
-                <Radar size={22} />
-              </span>
-              <div style={{ flex: "1 1 320px" }}>
-                <h3 style={{ marginTop: 0 }}>
-                  Radar de oportunidades <span className="badge soon">Em breve</span>
-                </h3>
-                <p>
-                  Vamos acompanhar os anúncios novos dos produtos que você revende e avisar quando surgir um preço abaixo
-                  do mercado, com o lucro estimado.
-                </p>
-              </div>
-            </article>
-          </Reveal>
         </section>
 
         <section className="lp-section lp-container" id="como-funciona" style={{ paddingTop: 0 }}>
@@ -306,6 +357,57 @@ export function Landing() {
           </Reveal>
         </section>
 
+        <section className="lp-section lp-container" id="radar" style={{ paddingTop: 40 }}>
+          <Reveal>
+            <div className="card radar-show hud">
+              <div>
+                <span className="lp-kicker">Radar de oportunidades</span>
+                <h2>
+                  Anúncios bons chegando até você, <span className="gradient-text">em minutos</span>.
+                </h2>
+                <p>
+                  O radar acompanha os produtos que você revende e avisa quando aparece um anúncio novo abaixo do
+                  preço de revenda, já com a conta do lucro feita.
+                </p>
+                <ul>
+                  <li>
+                    <Radar size={18} /> Busca contínua pelos modelos e regiões que você escolher
+                  </li>
+                  <li>
+                    <Wallet size={18} /> Preço de revenda estimado e lucro esperado em cada anúncio
+                  </li>
+                  <li>
+                    <Bell size={18} /> Aviso imediato quando surgir uma oportunidade
+                  </li>
+                </ul>
+                <div className="lp-cta" style={{ marginTop: 26 }}>
+                  <a className="btn btn-primary" href={withBase("/cadastro?plano=pro")}>
+                    Quero o radar <ArrowRight size={16} />
+                  </a>
+                </div>
+              </div>
+              <div className="radar-visual" aria-hidden="true">
+                <span className="blip" style={{ left: "62%", top: "28%", animationDelay: "0.3s" }} />
+                <span className="blip" style={{ left: "30%", top: "60%", animationDelay: "1.6s" }} />
+                <span className="blip" style={{ left: "70%", top: "70%", animationDelay: "2.7s" }} />
+                <span className="blip" style={{ left: "40%", top: "26%", animationDelay: "3.4s" }} />
+                <div className="blip-card glass float" style={{ left: "52%", top: "12%" }}>
+                  <strong>iPhone 13 · 128GB</strong>
+                  <span className="profit-pos">+R$ 420 de lucro</span>
+                </div>
+                <div className="blip-card glass float" style={{ left: "8%", top: "72%", animationDelay: "-3s" }}>
+                  <strong>PS5 Slim</strong>
+                  <span className="profit-pos">+R$ 610 de lucro</span>
+                </div>
+                <Radar
+                  size={30}
+                  style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)" }}
+                />
+              </div>
+            </div>
+          </Reveal>
+        </section>
+
         <section className="lp-section lp-container" id="planos">
           <Reveal className="lp-section-head">
             <span className="lp-kicker">Planos</span>
@@ -315,7 +417,7 @@ export function Landing() {
           <div className="pricing">
             {PLANS.map((plan, i) => (
               <Reveal key={plan.id} delay={i}>
-                <article className={`card plan ${plan.highlight ? "highlight gradient-border" : ""}`}>
+                <article className={`card plan-card ${plan.highlight ? "highlight gradient-border" : ""}`}>
                   <h3>
                     {plan.name}
                     {plan.highlight && <span className="badge soon">Recomendado</span>}
@@ -367,7 +469,7 @@ export function Landing() {
               ],
               [
                 "O que é o Radar de oportunidades?",
-                "Um recurso em desenvolvimento que vai acompanhar anúncios novos dos produtos que você revende e avisar quando aparecer um bom preço.",
+                "Um recurso do plano Pro que acompanha anúncios novos dos produtos que você revende e avisa quando aparece um bom preço, com o lucro estimado.",
               ],
             ].map(([q, a], i) => (
               <Reveal key={q} delay={i}>
@@ -384,7 +486,7 @@ export function Landing() {
 
         <section className="lp-container">
           <Reveal>
-            <div className="final-cta glass">
+            <div className="final-cta glass hud">
               <h2>
                 Pare de adivinhar.
                 <br />

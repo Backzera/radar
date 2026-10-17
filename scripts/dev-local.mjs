@@ -155,13 +155,13 @@ export async function runLocalDev({
     process.removeListener("SIGTERM", stop);
   });
   console.info(
-    `[Market Radar] Iniciando servidor local em ${plan.origin}. Ctrl+C encerra servidor e worker.`,
+    `[Ágio] Iniciando servidor local em ${plan.origin}. Ctrl+C encerra servidor e worker.`,
   );
   if (!plan.workerEnabled) {
     console.warn(
       config.LOCAL_WORKER_AUTOSTART === "false"
-        ? "[Market Radar] Worker automático local desativado. Use npm run worker em outro terminal."
-        : "[Market Radar] WORKER_TOKEN ausente/inválido. Execute npm run local:init e reinicie. Nenhuma configuração foi sobrescrita.",
+        ? "[Ágio] Worker automático local desativado. Use npm run worker em outro terminal."
+        : "[Ágio] WORKER_TOKEN ausente/inválido. Execute npm run local:init e reinicie. Nenhuma configuração foi sobrescrita.",
     );
     return { server, stop };
   }
@@ -179,21 +179,21 @@ export async function runLocalDev({
     });
     workerProcess.once("error", () =>
       console.error(
-        "[Market Radar] Não foi possível iniciar o worker. Use npm run worker para ver o diagnóstico.",
+        "[Ágio] Não foi possível iniciar o worker. Use npm run worker para ver o diagnóstico.",
       ),
     );
     workerProcess.once("exit", (code) => {
       if (!stopping)
         console.error(
-          `[Market Radar] Worker encerrou (código ${code ?? "sinal"}). O servidor continua aberto; confira a configuração e reinicie.`,
+          `[Ágio] Worker encerrou (código ${code ?? "sinal"}). O servidor continua aberto; confira a configuração e reinicie.`,
         );
     });
     console.info(
-      "[Market Radar] Worker iniciado nesta janela. As travas COLLECTION_ENABLED, PILOT_MODE e cotas foram preservadas.",
+      "[Ágio] Worker iniciado nesta janela. As travas COLLECTION_ENABLED, PILOT_MODE e cotas foram preservadas.",
     );
   } else if (!stopping) {
     console.error(
-      "[Market Radar] A API não ficou pronta em 120 s. O worker não iniciou. Confira o terminal; migrations ausentes exigem backup e npm run db:migrate. A atualização local 2.0 é aditiva; outras migrations exigem instalação apropriada.",
+      "[Ágio] A API não ficou pronta em 120 s. O worker não iniciou. Confira o terminal; migrations ausentes exigem backup e npm run db:migrate. A atualização local 2.0 é aditiva; outras migrations exigem instalação apropriada.",
     );
   }
   return { server, worker: workerProcess, stop };

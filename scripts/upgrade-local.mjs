@@ -124,7 +124,7 @@ export async function upgradeLocal(root = process.cwd()) {
   writeFileSync(temp, JSON.stringify(journal, null, 2) + "\n", { flag: "wx" });
   renameSync(temp, path);
   console.info(
-    "[Market Radar] Banco local atualizado; cópia de segurança em " + backup,
+    "[Ágio] Banco local atualizado; cópia de segurança em " + backup,
   );
   return { status: "upgraded", backup };
 }

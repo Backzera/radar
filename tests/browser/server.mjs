@@ -124,7 +124,7 @@ const server = createServer(async (req, res) => {
     res
       .writeHead(200, { "content-type": "text/html; charset=utf-8" })
       .end(
-        '<!doctype html><html lang="pt-BR"><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Market Radar | Teste isolado</title><link rel="stylesheet" href="/styles.css"></head><body><div style="padding:6px 12px;background:#fff2ce;color:#493916;font:12px system-ui">TESTE ISOLADO: dados sintéticos, sem coleta, sem credenciais reais. Bundle de integração, não build de produção.</div><div id="root"></div><script src="/app.js"></script></body></html>',
+        '<!doctype html><html lang="pt-BR"><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ágio | Teste isolado</title><link rel="stylesheet" href="/styles.css"></head><body><div style="padding:6px 12px;background:#fff2ce;color:#493916;font:12px system-ui">TESTE ISOLADO: dados sintéticos, sem coleta, sem credenciais reais. Bundle de integração, não build de produção.</div><div id="root"></div><script src="/app.js"></script></body></html>',
       );
   } catch (e) {
     console.error(e instanceof Error ? e.message : "Browser harness failed");

@@ -1,19 +1,30 @@
 "use client";
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Boxes,
+  CornerDownLeft,
   LayoutDashboard,
   LogOut,
   Plus,
   Radar,
   Receipt,
+  Search,
   ShieldCheck,
   UserRound,
   Users,
+  type LucideIcon,
 } from "lucide-react";
 import { api, useApi } from "./api";
-import { FEATURES } from "./brand";
-import { Logo } from "./logo";
+import { BRAND, FEATURES } from "./brand";
+import { Logo, LogoMark } from "./logo";
 import { Account, initials } from "./account";
 import { AdminUsers } from "./admin-users";
 import { AdminAudit, type AuditTab } from "./admin-audit";
@@ -27,21 +38,22 @@ import { ToastProvider, useToast } from "./ui";
 import type { ItemDetail, Me, Preferences } from "./types";
 import { withBase } from "./base";
 
-// The original radar UI, loaded only when the feature is switched on.
+// The radar UI, loaded only when the feature is switched on.
 const LegacyRadar = lazy(() =>
   import("../radar-app").then((m) => ({ default: m.RadarApp })),
 );
 
 const VIEWS = [
-  { id: "painel", label: "Painel", icon: LayoutDashboard },
-  { id: "estoque", label: "Estoque", icon: Boxes },
-  { id: "vendas", label: "Vendas", icon: Receipt },
-  { id: "radar", label: "Radar", icon: Radar, soon: !FEATURES.radar },
-  { id: "conta", label: "Conta", icon: UserRound },
+  { id: "painel", label: "Painel", icon: LayoutDashboard, key: "1" },
+  { id: "estoque", label: "Estoque", icon: Boxes, key: "2" },
+  { id: "vendas", label: "Vendas", icon: Receipt, key: "3" },
+  { id: "radar", label: "Radar", icon: Radar, key: "4", soon: !FEATURES.radar },
+  { id: "conta", label: "Conta", icon: UserRound, key: "5" },
   { id: "usuarios", label: "Usuários", icon: Users, adminOnly: true },
   { id: "auditoria", label: "Auditoria", icon: ShieldCheck, adminOnly: true },
 ] as const;
 type View = (typeof VIEWS)[number]["id"];
+type ViewDef = (typeof VIEWS)[number];
 
 function useUrlState() {
   const [params, setParams] = useState(() => new URLSearchParams());
@@ -68,6 +80,137 @@ function useUrlState() {
   return [params, navigate] as const;
 }
 
+const isMac = () =>
+  typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+
+type Command = {
+  id: string;
+  label: string;
+  hint?: string;
+  group: string;
+  icon: LucideIcon;
+  keys?: string;
+  run: () => void;
+};
+
+/** ⌘K palette: navigation and the main actions, searchable. */
+function CommandPalette({
+  open,
+  onClose,
+  commands,
+}: {
+  open: boolean;
+  onClose: () => void;
+  commands: Command[];
+}) {
+  const [query, setQuery] = useState("");
+  const [cursor, setCursor] = useState(0);
+  const input = useRef<HTMLInputElement | null>(null);
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q
+      ? commands.filter((c) =>
+          `${c.label} ${c.hint ?? ""} ${c.group}`.toLowerCase().includes(q),
+        )
+      : commands;
+  }, [commands, query]);
+  useEffect(() => {
+    if (!open) return;
+    queueMicrotask(() => {
+      setQuery("");
+      setCursor(0);
+      input.current?.focus();
+    });
+  }, [open]);
+  useEffect(() => {
+    queueMicrotask(() => setCursor(0));
+  }, [query]);
+  if (!open) return null;
+  const pick = (c: Command) => {
+    onClose();
+    c.run();
+  };
+  const groups = [...new Set(results.map((c) => c.group))];
+  return (
+    <div
+      className="cmdk-overlay"
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="cmdk" role="dialog" aria-modal="true" aria-label="Comandos">
+        <div className="cmdk-input">
+          <Search size={18} />
+          <input
+            ref={input}
+            value={query}
+            placeholder="Ir para… ou fazer algo"
+            aria-label="Buscar comando"
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") onClose();
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setCursor((c) => Math.min(results.length - 1, c + 1));
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setCursor((c) => Math.max(0, c - 1));
+              }
+              if (e.key === "Enter" && results[cursor]) pick(results[cursor]);
+            }}
+          />
+          <span className="kbd">esc</span>
+        </div>
+        <div className="cmdk-list" role="listbox">
+          {results.length === 0 && (
+            <div className="cmdk-empty">Nada encontrado para “{query}”.</div>
+          )}
+          {groups.map((group) => (
+            <div key={group}>
+              <div className="cmdk-group">{group}</div>
+              {results
+                .filter((c) => c.group === group)
+                .map((c) => {
+                  const index = results.indexOf(c);
+                  const Icon = c.icon;
+                  return (
+                    <button
+                      key={c.id}
+                      className="cmdk-item"
+                      role="option"
+                      aria-selected={index === cursor}
+                      onMouseEnter={() => setCursor(index)}
+                      onClick={() => pick(c)}
+                    >
+                      <Icon size={17} />
+                      <span>{c.label}</span>
+                      {c.hint && (
+                        <small className="muted" style={{ fontSize: 12 }}>
+                          {c.hint}
+                        </small>
+                      )}
+                      {c.keys && <span className="kbd">{c.keys}</span>}
+                    </button>
+                  );
+                })}
+            </div>
+          ))}
+        </div>
+        <div className="cmdk-foot">
+          <span>
+            <span className="kbd">↑↓</span> navegar
+          </span>
+          <span>
+            <span className="kbd">
+              <CornerDownLeft size={10} />
+            </span>{" "}
+            abrir
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Shell({ me }: { me: Me }) {
   const toast = useToast();
   const [params, navigate] = useUrlState();
@@ -75,12 +218,17 @@ function Shell({ me }: { me: Me }) {
   const [editor, setEditor] = useState<{ item: ItemDetail | null } | null>(
     null,
   );
+  const [palette, setPalette] = useState(false);
   const prefs = useApi<Preferences>("brick/preferences");
   const bump = useCallback(() => setVersion((v) => v + 1), []);
-  const allowed = VIEWS.filter((v) => !("adminOnly" in v) || me.admin);
+  const allowed = useMemo(
+    () => VIEWS.filter((v) => !("adminOnly" in v) || me.admin),
+    [me.admin],
+  );
   const view = (
     allowed.some((v) => v.id === params.get("v")) ? params.get("v") : "painel"
   ) as View;
+  const current = VIEWS.find((v) => v.id === view) as ViewDef;
   const openItem = useCallback(
     (id: string) => navigate({ item: id }),
     [navigate],
@@ -102,36 +250,108 @@ function Shell({ me }: { me: Me }) {
       navigate({ boasvindas: null }, true);
     }
   }, [params, me.user.name, navigate, toast]);
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await api("auth/logout", { body: {} }).catch(() => undefined);
     location.href = withBase("/");
-  };
-  const newItem = () => setEditor({ item: null });
+  }, []);
+  const newItem = useCallback(() => setEditor({ item: null }), []);
   const staleAfterDays = prefs.data?.staleAfterDays ?? 30;
+  const mod = isMac() ? "⌘" : "Ctrl";
+
+  // Keyboard: ⌘K palette, ⌘N new product, ⌘1-5 views.
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (!meta) return;
+      const k = e.key.toLowerCase();
+      if (k === "k") {
+        e.preventDefault();
+        setPalette((p) => !p);
+      } else if (k === "n" && !e.shiftKey) {
+        e.preventDefault();
+        newItem();
+      } else if (/^[1-5]$/.test(k)) {
+        const target = allowed.find((v) => "key" in v && v.key === k);
+        if (target) {
+          e.preventDefault();
+          goTo(target.id);
+        }
+      }
+    };
+    addEventListener("keydown", key);
+    return () => removeEventListener("keydown", key);
+  }, [allowed, goTo, newItem]);
+
+  const commands: Command[] = [
+    {
+      id: "new",
+      label: "Novo produto",
+      hint: "Cadastrar uma compra",
+      group: "Ações",
+      icon: Plus,
+      keys: `${mod} N`,
+      run: newItem,
+    },
+    ...allowed.map((v) => ({
+      id: v.id,
+      label: v.label,
+      group: "adminOnly" in v ? "Administração" : "Ir para",
+      icon: v.icon,
+      keys: "key" in v ? `${mod} ${v.key}` : undefined,
+      run: () => goTo(v.id),
+    })),
+    {
+      id: "logout",
+      label: "Sair da conta",
+      group: "Conta",
+      icon: LogOut,
+      run: () => void logout(),
+    },
+  ];
+
+  const navButton = ({ id, label, icon: Icon, ...rest }: ViewDef) => (
+    <button
+      key={id}
+      className="nav-item"
+      aria-current={view === id ? "page" : undefined}
+      onClick={() => goTo(id)}
+    >
+      <Icon size={18} />
+      {label}
+      {"soon" in rest && rest.soon ? (
+        <span className="badge soon">Em breve</span>
+      ) : "key" in rest ? (
+        <span className="nav-key">
+          {mod} {rest.key}
+        </span>
+      ) : null}
+    </button>
+  );
+
   return (
     <div className="shell">
       <aside className="sidebar">
         <Logo />
         <button className="btn btn-primary sidebar-cta" onClick={newItem}>
           <Plus size={17} /> Novo produto
+          <span className="kbd">{mod} N</span>
         </button>
         <nav className="nav" aria-label="Navegação principal">
-          {allowed.map(({ id, label, icon: Icon, ...rest }) => (
-            <button
-              key={id}
-              className="nav-item"
-              aria-current={view === id ? "page" : undefined}
-              onClick={() => goTo(id)}
-            >
-              <Icon size={19} />
-              {label}
-              {"soon" in rest && rest.soon ? (
-                <span className="badge soon">Em breve</span>
-              ) : null}
-            </button>
-          ))}
+          <div className="nav-label">Operação</div>
+          {allowed.filter((v) => !("adminOnly" in v)).map(navButton)}
+          {me.admin && (
+            <>
+              <div className="nav-label" style={{ marginTop: 10 }}>
+                Administração
+              </div>
+              {allowed.filter((v) => "adminOnly" in v).map(navButton)}
+            </>
+          )}
         </nav>
         <div className="sidebar-foot">
+          <div className="sidebar-status">
+            <span className="pulse-dot" /> Sincronizado
+          </div>
           <div className="user-chip">
             <span className="avatar">
               {initials(me.user.name, me.user.email)}
@@ -151,17 +371,40 @@ function Shell({ me }: { me: Me }) {
           </div>
         </div>
       </aside>
-      <div style={{ minWidth: 0 }}>
+      <div className="main-col">
         <header className="topbar">
-          <Logo />
-          <button
-            className="avatar"
-            style={{ border: 0, cursor: "pointer" }}
-            onClick={() => goTo("conta")}
-            aria-label="Conta"
-          >
-            {initials(me.user.name, me.user.email)}
-          </button>
+          <div className="crumb">
+            <span className="hide-mobile crumb-root">
+              <span className="logo-mark" style={{ width: 26, height: 26, borderRadius: 8 }}>
+                <LogoMark size={15} />
+              </span>
+            </span>
+            <span className="hide-mobile crumb-root">{BRAND.name}</span>
+            <span className="sep hide-mobile crumb-root">/</span>
+            <span className="logo-mark" style={{ width: 30, height: 30, borderRadius: 9 }} data-mobile-only>
+              <LogoMark size={17} />
+            </span>
+            <strong>{current.label}</strong>
+          </div>
+          <div className="topbar-actions">
+            <button
+              className="cmd-btn"
+              onClick={() => setPalette(true)}
+              aria-label="Abrir comandos"
+            >
+              <Search size={15} />
+              <span className="cmd-text">Ir para ou fazer algo…</span>
+              <span className="kbd">{mod} K</span>
+            </button>
+            <button
+              className="avatar"
+              onClick={() => goTo("conta")}
+              aria-label="Conta"
+              title={me.user.email ?? "Conta"}
+            >
+              {initials(me.user.name, me.user.email)}
+            </button>
+          </div>
         </header>
         <main className="main" id="conteudo" key={view}>
           {view === "painel" && (
@@ -188,9 +431,25 @@ function Shell({ me }: { me: Me }) {
           )}
           {view === "radar" &&
             (FEATURES.radar ? (
-              <Suspense fallback={null}>
-                <LegacyRadar />
-              </Suspense>
+              <>
+                <div className="view-head fade-up">
+                  <div>
+                    <h1>Radar de oportunidades</h1>
+                    <p>Anúncios recentes dentro dos seus critérios, com a conta do lucro feita.</p>
+                  </div>
+                </div>
+                <Suspense
+                  fallback={
+                    <div className="dash" aria-busy="true">
+                      <div className="skeleton span-12" style={{ height: 48 }} />
+                      <div className="skeleton span-8" style={{ height: 160 }} />
+                      <div className="skeleton span-4" style={{ height: 160 }} />
+                    </div>
+                  }
+                >
+                  <LegacyRadar embedded />
+                </Suspense>
+              </>
             ) : (
               <RadarSoon />
             ))}
@@ -252,6 +511,7 @@ function Shell({ me }: { me: Me }) {
           ),
         )}
       </nav>
+      <CommandPalette open={palette} onClose={() => setPalette(false)} commands={commands} />
       <ItemDetailDrawer
         id={params.get("item")}
         onClose={() => navigate({ item: null })}
@@ -290,8 +550,9 @@ export function BrickApp() {
     return (
       <div className="page-loader" aria-busy="true">
         <span className="logo-mark">
-          <Radar size={28} />
+          <LogoMark size={30} />
         </span>
+        <span className="loader-text">{me.error ? "Falha ao carregar" : "Carregando painel"}</span>
         {me.error && <p className="muted">{me.error}</p>}
       </div>
     );

@@ -13,6 +13,7 @@ import { formatCents } from "@/core/brick";
 import { api, errorText, fieldErrors } from "./api";
 import { BRAND, PLANS, type PlanId } from "./brand";
 import { Logo } from "./logo";
+import { Radar } from "lucide-react";
 import { Field, Spinner } from "./ui";
 import { withBase } from "./base";
 
@@ -79,6 +80,9 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
       <aside className="auth-aside">
         <Logo />
         <div className="fade-up">
+          <span className="kicker" style={{ marginBottom: 16 }}>
+            {signup ? "Conta nova" : "Acesso"}
+          </span>
           <h2>
             {signup ? (
               <>
@@ -114,13 +118,22 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
               );
             })}
           </ul>
+          <div className="radar-visual" aria-hidden="true">
+            <span className="blip" style={{ left: "62%", top: "28%", animationDelay: "0.3s" }} />
+            <span className="blip" style={{ left: "30%", top: "60%", animationDelay: "1.6s" }} />
+            <span className="blip" style={{ left: "70%", top: "70%", animationDelay: "2.7s" }} />
+            <Radar
+              size={24}
+              style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)" }}
+            />
+          </div>
         </div>
-        <span className="muted" style={{ fontSize: 13 }}>
+        <span className="muted mono" style={{ fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase" }}>
           {BRAND.name} · {BRAND.tagline}
         </span>
       </aside>
       <main className="auth-main">
-        <div className="card auth-card glass fade-up">
+        <div className="card auth-card glass hud fade-up">
           <div
             style={{ display: "flex", justifyContent: "center" }}
             className="mobile-logo"
@@ -144,7 +157,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
               <p>
                 {signup
                   ? "Leva menos de um minuto."
-                  : "Acesse seu painel de brick."}
+                  : `Acesse seu painel ${BRAND.name}.`}
               </p>
               {error && (
                 <div className="form-error" role="alert">

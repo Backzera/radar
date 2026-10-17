@@ -1,5 +1,13 @@
-# 2.0.0-rc.1 · seleção e experiência de compra
+# 2.1.0 · nova marca e design
 
+- Nova marca: **Ágio** (antes Market Radar), com logo, favicon e textos atualizados.
+- Repaginação completa da interface: identidade "obsidian + volt", tipografia Space Grotesk / Inter / JetBrains Mono, fundo vivo com grade e varredura, cantos HUD, luz que segue o cursor nos cards.
+- App: barra superior com trilha, paleta de comandos (`⌘K`), atalhos de teclado, barra lateral reorganizada por grupos, tabbar flutuante no celular.
+- Correção: o radar dentro do app não renderiza mais uma segunda barra lateral; as seções viram abas no topo da tela Radar.
+- Correção: os estilos globais do radar (`radar.css`) vazavam para o app inteiro depois de abrir a aba Radar; tudo agora fica escopado em `.saas`.
+- Landing nova: hero com painel 3D e mini-radar, faixa de provas, grade bento de recursos, linha do tempo de passos, vitrine do radar e planos.
+
+# 2.0.0-rc.1 · seleção e experiência de compra
 Filtro temporal de até sete dias, identidade exata, aliases automáticos, ativação inicial idempotente, feed de oportunidades separado do histórico, detalhes comerciais, negociação, quadro de negócios, disponibilidade opcional, cadência compatível com cotas e diagnóstico de aproveitamento. Atualização local aditiva com backup. Ver docs/release-2.0.md para evidências e restrições.
 
 # 2.0.0-dev.1 — desenvolvimento local, 16/09/2026

@@ -236,7 +236,7 @@ if (
 ) {
   try {
     const report = await runDoctor();
-    console.log("\nMARKET RADAR Doctor\n");
+    console.log("\nÁGIO Doctor\n");
     for (const row of report.rows)
       console.log(
         `${row.name.padEnd(34)} ${row.status}${row.detail ? ` · ${row.detail}` : ""}`,

@@ -1,5 +1,5 @@
 /**
- * Mantém o Market Radar no ar no Windows: lê o .env, inicia app\server.js,
+ * Mantém o Ágio no ar no Windows: lê o .env, inicia app\server.js,
  * reinicia se ele cair e grava os logs em data\logs (14 dias).
  * Quem roda este arquivo é a tarefa agendada criada pelo instalar.ps1.
  */

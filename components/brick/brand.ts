@@ -1,9 +1,10 @@
 /** Brand and plans in one place: rename the product or change prices here. */
 export const BRAND = {
-  name: "Market Radar",
-  tagline: "O painel do bricker",
+  name: "Ágio",
+  /** Short line under the name: what the product is, in four words. */
+  tagline: "Inteligência de revenda",
   description:
-    "Controle de estoque e lucro para quem compra e revende usados: fotos, custos, vendas, margem e metas num só lugar.",
+    "Estoque, custos, vendas e lucro líquido de quem compra e revende usados, com radar de oportunidades. Tudo num painel só.",
   /** Shown on the terms and privacy pages; fill in before launching. */
   supportEmail: "",
 };
@@ -30,7 +31,7 @@ export const PLANS = [
     pitch: "Para quem vive de brick e quer sair na frente.",
     features: [
       "Tudo do Essencial",
-      "Radar de oportunidades assim que lançar",
+      "Radar de oportunidades do Marketplace",
       "Acesso antecipado às novidades",
       "Suporte prioritário",
     ],

@@ -18,6 +18,7 @@ import { SearchList } from "./search-list";
 import { DealsPanel } from "./deals-panel";
 import { ResultsFeed } from "./results-feed";
 import { AccountPanel, AlertsPanel, AdminPanel } from "./account-panel";
+import { BRAND } from "../brick/brand";
 const navigation = [
   ["results", "Oportunidades", Search],
   ["searches", "Meus radares", Radar],
@@ -26,7 +27,12 @@ const navigation = [
   ["purchases", "Meus negócios", ShoppingBag],
   ["account", "Conta", User],
 ] as const;
-export function RadarShell() {
+/**
+ * The radar. Standalone it renders its own sidebar; embedded in the Ágio
+ * shell (embedded=true) the sections become a tab row so there is only one
+ * sidebar on screen.
+ */
+export function RadarShell({ embedded = false }: { embedded?: boolean } = {}) {
   const b = useResource<Bootstrap>("bootstrap"),
     [params, setParams] = useState(() => new URLSearchParams()),
     [wizard, setWizard] = useState<{ monitor?: Monitor; draft?: Draft } | null>(
@@ -88,56 +94,81 @@ export function RadarShell() {
   };
   const data = b.data,
     view = params.get("view") ?? "results";
+  const go = (id: string) => {
+    setWizard(null);
+    if (id === "admin") change({ view: "admin" });
+    else
+      change({
+        view: id,
+        filter: id === "saved" ? "saved" : "all",
+        page: "1",
+        listing: "",
+      });
+  };
+  const navButtons = (
+    <>
+      {navigation.map(([id, label, Icon]) => (
+        <button
+          key={id}
+          aria-current={view === id ? "page" : undefined}
+          onClick={() => go(id)}
+        >
+          <Icon size={18} />
+          {label}
+        </button>
+      ))}
+      {data?.session.admin && (
+        <button
+          aria-current={view === "admin" ? "page" : undefined}
+          onClick={() => go("admin")}
+        >
+          <SlidersHorizontal size={18} />
+          Administração
+        </button>
+      )}
+    </>
+  );
   return (
-    <div className="saas saas-app">
-      <a className="saas-skip" href="#radar-content">
-        Ir para o conteúdo
-      </a>
-      <aside className="saas-sidebar">
-        <div className="saas-brand">
-          <Radar size={29} />
-          <span>
-            Market Radar<small>Encontre. Avalie. Decida.</small>
+    <div className={`saas saas-app${embedded ? " saas-embedded" : ""}`}>
+      {!embedded && (
+        <a className="saas-skip" href="#radar-content">
+          Ir para o conteúdo
+        </a>
+      )}
+      {embedded ? (
+        <nav className="radar-tabs" aria-label="Seções do radar">
+          {navButtons}
+          <span className="radar-tabs-side">
+            <span className="saas-status-dot" data-connected={connected} />
+            {connected ? "ao vivo" : "em espera"}
+            <button
+              className="btn btn-ghost btn-icon"
+              onClick={refresh}
+              disabled={b.loading}
+              aria-label="Atualizar radar"
+              title="Atualizar"
+            >
+              <RefreshCw size={15} />
+            </button>
           </span>
-        </div>
-        <nav aria-label="Navegação principal">
-          {navigation.map(([id, label, Icon]) => (
-            <button
-              key={id}
-              aria-current={view === id ? "page" : undefined}
-              onClick={() => {
-                setWizard(null);
-                change({
-                  view: id,
-                  filter: id === "saved" ? "saved" : "all",
-                  page: "1",
-                  listing: "",
-                });
-              }}
-            >
-              <Icon size={18} />
-              {label}
-            </button>
-          ))}
-          {data?.session.admin && (
-            <button
-              aria-current={view === "admin" ? "page" : undefined}
-              onClick={() => {
-                setWizard(null);
-                change({ view: "admin" });
-              }}
-            >
-              <SlidersHorizontal size={18} />
-              Administração
-            </button>
-          )}
         </nav>
-        <div className="saas-sidebar-foot">
-          <span className="saas-status-dot" data-connected={connected} />
-          {connected ? "Painel conectado" : "Conexão do painel em espera"}
-          <small>A conexão não comprova que a fonte está coletando.</small>
-        </div>
-      </aside>
+      ) : (
+        <aside className="saas-sidebar">
+          <div className="saas-brand">
+            <Radar size={29} />
+            <span>
+              {BRAND.name}
+              <small>Radar de oportunidades</small>
+            </span>
+          </div>
+          <nav aria-label="Navegação principal">{navButtons}</nav>
+          <div className="saas-sidebar-foot">
+            <span className="saas-status-dot" data-connected={connected} />
+            {connected ? "Painel conectado" : "Conexão do painel em espera"}
+            <small>A conexão não comprova que a fonte está coletando.</small>
+          </div>
+        </aside>
+      )}
       <main id="radar-content" className="saas-main">
         <header className="saas-topbar">
           <span>{data?.account.plan.name ?? "Seu espaço de buscas"}</span>
@@ -222,7 +253,7 @@ export function RadarShell() {
                 <section className="saas-dashboard-head">
                   <div>
                     <p className="saas-eyebrow">
-                      MARKET RADAR · SELEÇÃO PARA VOCÊ
+                      Radar · seleção para você
                     </p>
                     <h1>Encontre sua próxima compra.</h1>
                     <p>
