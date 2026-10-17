@@ -45,7 +45,9 @@ export interface RawListing {
   longitude: number | null;
   sellerId: string | null;
   publishedAt: string | null;
-  publicationSource: "provider" | "unknown";
+  // "badge": recência vinda de um selo do FB ("Acabou de chegar"), sem hora
+  // exata; a UI mostra um rótulo grosseiro em vez de "há X minutos".
+  publicationSource: "provider" | "unknown" | "badge";
   publicationConfidence: number;
   availability: Availability;
   availabilityCheckedAt?: string;

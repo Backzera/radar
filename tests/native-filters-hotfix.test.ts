@@ -234,3 +234,35 @@ test("Bootstrap: a fonte própria anuncia filtragem local (sem recência/raio/ci
     h.sql.close();
   }
 });
+
+test("Recência por selo do FB vira publicationSource 'badge' (sem hora exata); idade explícita vira 'provider'", async () => {
+  const net = scraper();
+  // "Acabou de chegar" -> o microserviço envia publishedApprox:true (sem hora exata).
+  net.setItems([
+    serviceItem("201", { publishedApprox: true }),
+    // Idade relativa explícita do FB ("há 3 dias") -> data confiável, sem a flag.
+    serviceItem("202", { publishedApprox: false }),
+  ]);
+  const provider = new SelfScraperProvider(
+    { baseUrl: cfg.SCRAPER_URL, maxRecords: 10 },
+    net.transport,
+  );
+  const result = await provider.search({
+    query: "iPhone 14",
+    city: "Curitiba",
+    radiusKm: 30,
+    sequence: 0,
+    limit: 10,
+  });
+  const badge = result.items.find((i) => i.externalId === "201")!;
+  const exact = result.items.find((i) => i.externalId === "202")!;
+  // Selo: fonte "badge", confiança mínima confiável, mas ainda válido para a janela.
+  assert.equal(badge.publicationSource, "badge");
+  assert.equal(badge.publicationStatus, "valid");
+  assert.equal(badge.publicationConfidence, 70);
+  assert.ok(badge.publishedAt);
+  // Idade explícita: fonte "provider" com confiança cheia.
+  assert.equal(exact.publicationSource, "provider");
+  assert.equal(exact.publicationStatus, "valid");
+  assert.equal(exact.publicationConfidence, 80);
+});

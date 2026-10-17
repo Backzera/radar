@@ -46,6 +46,9 @@ interface ServiceItem {
   location?: string;
   images?: string[];
   publishedAt?: string | null;
+  // true quando publishedAt vem de um selo de recência do FB ("Acabou de
+  // chegar"), sem hora exata; a UI então mostra um rótulo grosseiro.
+  publishedApprox?: boolean;
   sellerId?: string | null;
   condition?: string | null;
 }
@@ -60,6 +63,9 @@ function mapItem(x: ServiceItem): RawListing | null {
     typeof x.publishedAt === "string" && !Number.isNaN(Date.parse(x.publishedAt))
       ? new Date(x.publishedAt).toISOString()
       : null;
+  // Recência por selo do FB (sem hora exata) é confiável para a janela, mas não
+  // deve ser exibida como "há X minutos": marcamos como "badge".
+  const approx = published !== null && x.publishedApprox === true;
   const images = (x.images ?? [])
     .filter((url) => {
       try {
@@ -94,8 +100,9 @@ function mapItem(x: ServiceItem): RawListing | null {
     sellerId: x.sellerId != null ? String(x.sellerId) : null,
     images,
     publishedAt: published,
-    publicationSource: published ? "provider" : "unknown",
-    publicationConfidence: published ? 80 : 0,
+    publicationSource: !published ? "unknown" : approx ? "badge" : "provider",
+    // 70 (mínimo confiável) para selo; 80 para idade relativa explícita do FB.
+    publicationConfidence: !published ? 0 : approx ? 70 : 80,
     availability: "unknown",
     condition:
       cond.includes("new") && !cond.includes("like new")

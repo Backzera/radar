@@ -66,24 +66,28 @@ def _iso(dt: datetime) -> str:
 
 
 def parse_published(lines):
-    """Estima publishedAt (ISO UTC) a partir dos sinais de recencia do card do FB.
-    Retorna None quando o FB nao expoe nenhum sinal (o item fica sem data)."""
+    """Estima publishedAt a partir dos sinais de recencia do card do FB.
+    Retorna (iso_utc, approx):
+      - approx=False: idade relativa explicita do FB ("ha 3 dias", "ontem") -> data confiavel.
+      - approx=True: apenas selo de "recem publicado" ("Acabou de chegar", "hoje"),
+        sem hora exata -> a UI mostra rotulo grosseiro, nao "ha X minutos".
+      - (None, False): o FB nao expos nenhum sinal; o item fica sem data e e filtrado."""
     now = datetime.now(timezone.utc)
     for raw in lines:
         low = raw.strip().lower()
         if not low:
             continue
         if FRESH_NOW_RE.search(low) or low == "hoje":
-            return _iso(now)
+            return _iso(now), True
         if low == "ontem":
-            return _iso(now - timedelta(days=1))
+            return _iso(now - timedelta(days=1)), False
         m = REL_AGE_RE.search(low)
         if m:
             unit = m.group(2).lower()
             mins = _UNIT_MINUTES.get(unit)
             if mins:
-                return _iso(now - timedelta(minutes=int(m.group(1)) * mins))
-    return None
+                return _iso(now - timedelta(minutes=int(m.group(1)) * mins)), False
+    return None, False
 
 
 app = FastAPI(title="market-radar-scraper")
@@ -181,6 +185,7 @@ def card_to_item(anchor) -> dict | None:
     location = next((l for l in reversed(text) if is_loc(l)), "")
     imgs = anchor.css("img")
     img = imgs[0] if imgs else None
+    published_at, published_approx = parse_published(text)
     return {
         "listingId": m.group(1),
         "url": canonical(href),
@@ -191,7 +196,9 @@ def card_to_item(anchor) -> dict | None:
         "images": [img.attrib.get("src")] if img and img.attrib.get("src") else [],
         # Data exata não vem no card; usamos o sinal de recência do próprio FB
         # ("Acabou de chegar", "há X dias", "ontem"). Sem sinal, fica None.
-        "publishedAt": parse_published(text),
+        # publishedApprox=True marca recência por selo (sem hora exata).
+        "publishedAt": published_at,
+        "publishedApprox": published_approx,
         "sellerId": None,
         "condition": None,
     }

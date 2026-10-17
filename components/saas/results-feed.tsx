@@ -310,7 +310,9 @@ export function ResultsFeed({
                     </p>
                     <p className="saas-muted">
                       {l.publishedAt && l.publicationStatus === "valid"
-                        ? relativePublication(l.publishedAt)
+                        ? l.publicationSource === "badge"
+                          ? "Recém-publicado segundo o Facebook · sem data exata"
+                          : relativePublication(l.publishedAt)
                         : `Publicação desconhecida · Visto: ${when(l.firstSeenAt)}`}
                     </p>
                     <p>
@@ -582,8 +584,11 @@ export function ListingDialog({
             <span>{o.listing.city || "Cidade não informada"}</span>
           </div>
           <p className="saas-muted">
-            {relativePublication(o.listing.publishedAt)} ·{" "}
-            {explanation.initial || "Encontrado pelo seu radar."}
+            {o.listing.publicationStatus === "valid" &&
+            o.listing.publicationSource === "badge"
+              ? "Recém-publicado segundo o Facebook · sem data exata"
+              : relativePublication(o.listing.publishedAt)}{" "}
+            · {explanation.initial || "Encontrado pelo seu radar."}
           </p>
           <div className="saas-actions">
             {safeListingUrl(o.listing.originalUrl ?? o.listing.url) && (
