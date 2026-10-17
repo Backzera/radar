@@ -64,6 +64,12 @@ export function nativePublicationPolicy(
   if (query.type !== "keyword")
     return { query, coverage: "url_filters" as const, days: null, issue: null };
   const days: 1 | 7 = requestedMinutes <= 1440 ? 1 : 7;
+  // Fonte própria (scraper sem schema de filtros nativos): a recência é aplicada
+  // LOCALMENTE pelo pipeline — o scraper devolve tudo e a busca é filtrada por
+  // data depois. É o modo normal de operação, não uma pendência de configuração,
+  // então não há bloqueio nem mensagem de erro.
+  if (!schema)
+    return { query, coverage: "local_only" as const, days: null, issue: null };
   const field = schema?.fields.find(
     (f) => f.name === "date_listed" && f.supported && f.inputEnabled !== false,
   );
@@ -77,7 +83,7 @@ export function nativePublicationPolicy(
       query,
       coverage: "local_only" as const,
       days: null,
-      issue: `O período de ${days === 1 ? "24 horas" : "7 dias"} ainda não está confirmado para esta fonte. Abra Administração → Filtros da busca e confirme o valor exibido no painel da Bright Data. Nenhuma coleta com outro período será iniciada.`,
+      issue: `O período de ${days === 1 ? "24 horas" : "7 dias"} ainda não está confirmado para esta fonte. Confirme o filtro de data na Administração antes de iniciar a coleta.`,
     };
   return {
     query: {
@@ -111,7 +117,7 @@ export function nativeRadius(
   const unit = radiusUnit(field.unit);
   if (!unit)
     return nativeFilterError(
-      "A unidade do raio não foi informada pela fonte. Confirme quilômetros, milhas ou metros em Administração → Filtros da busca. O raio não será omitido e nenhum crédito de coleta será reservado.",
+      "A unidade do raio não foi informada pela fonte. Confirme quilômetros, milhas ou metros na Administração. O raio não será omitido e nenhuma coleta será iniciada sem ele.",
     );
   if (!Number.isFinite(radiusKm) || radiusKm <= 0)
     return nativeFilterError("Informe um raio em quilômetros maior que zero.");

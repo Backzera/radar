@@ -185,21 +185,21 @@ export async function bootstrap(
         m.active &&
         !m.archived &&
         !job &&
-        m.queryType !== "search_url"
+        m.queryType !== "search_url" &&
+        // Só há filtros nativos a confirmar quando a fonte declara um schema. O
+        // scraper próprio não tem schema: cidade, raio e recência são filtrados
+        // LOCALMENTE pelo pipeline, então não existe pendência de configuração.
+        contract?.schemas?.keyword
       ) {
         const temporal = nativePublicationPolicy(
           { type: "keyword", keyword: m.query },
-          contract?.schemas?.keyword,
+          contract.schemas.keyword,
           Math.min(m.maxListingAgeMinutes ?? 10080, 10080),
         );
         let inputIssue = temporal.issue;
         if (!inputIssue) {
           try {
-            nativeRadius(
-              temporal.query,
-              contract?.schemas?.keyword,
-              m.radiusKm,
-            );
+            nativeRadius(temporal.query, contract.schemas.keyword, m.radiusKm);
           } catch (e) {
             inputIssue =
               e instanceof Error
