@@ -263,7 +263,10 @@ export async function handleAdminUsersRoute(
   }
   const m = path.match(/^admin\/users\/([^/]+)(?:\/(status|password|plan))?$/);
   if (!m) throw new HttpError(404, "Rota não encontrada.");
-  const userId = decodeURIComponent(m[1]);
+  // O id do usuário é "user:uuid". O ":" no caminho da URL não passa limpo pelo
+  // proxy do IIS (VPS), o que fazia excluir/bloquear/etc. falhar com "não
+  // encontrado". O cliente envia ":" como "~" no caminho; aqui desfazemos.
+  const userId = decodeURIComponent(m[1]).replace(/~/g, ":");
   if (request.method === "DELETE" && !m[2])
     return json(await deleteUser(db, admin, actor, userId, body, media));
   if (request.method !== "POST" || !m[2])

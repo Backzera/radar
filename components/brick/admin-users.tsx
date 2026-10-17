@@ -312,8 +312,10 @@ export function AdminUsers({
   const { data, error, refresh } = useApi<UserList>(
     `admin/users?${new URLSearchParams({ q: search })}`,
   );
+  // O ":" do id (user:uuid) não passa limpo pelo proxy do IIS na VPS; enviamos
+  // como "~" no caminho e o servidor desfaz. (No localhost é indiferente.)
   const path = (u: AdminUser, suffix = "") =>
-    `admin/users/${encodeURIComponent(u.id)}${suffix}`;
+    `admin/users/${encodeURIComponent(u.id.replace(/:/g, "~"))}${suffix}`;
   const act = async (label: string, run: () => Promise<void>) => {
     setBusy(true);
     try {
