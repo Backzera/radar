@@ -40,4 +40,4 @@ export const PLANS = [
 export type PlanId = (typeof PLANS)[number]["id"];
 
 /** Features behind a switch. The radar backend stays in place while off. */
-export const FEATURES = { radar: false };
+export const FEATURES = { radar: true };

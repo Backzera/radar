@@ -1,4 +1,6 @@
 "use client";
-// The original radar UI. It is not mounted while FEATURES.radar is off; to bring
-// it back, also import app/radar.css and app/saas.css (scoped to the radar view).
+// The original radar UI, now switched on (FEATURES.radar = true).
+// The radar/saas stylesheets load with the lazy-mounted radar view.
+import "../app/radar.css";
+import "../app/saas.css";
 export { RadarShell as RadarApp } from "./saas/radar-shell";

@@ -4,20 +4,22 @@ import { providerSetup } from "../server/provider-setup";
 import { providerQuery, ProviderQueryError } from "../core/provider-query";
 import { monitorSchema } from "../server/validation";
 
-test("setup separa chave/dataset/direitos sem serializar secrets", () => {
-  const setup = providerSetup(
-    {
-      BRIGHTDATA_API_KEY: "fixture-private-value",
-      WORKER_TOKEN: "fixture-worker-value",
-      BRIGHTDATA_DATASET_ID: "gd_lvt9iwuh6fbcwmx1a",
-      FACEBOOK_DATA_RIGHTS_CONFIRMED: "false",
-    },
+test("setup reflete o scraper próprio (SCRAPER_URL) sem serializar secrets", () => {
+  // Sem SCRAPER_URL, a fonte não está pronta.
+  const off = providerSetup(
+    { WORKER_TOKEN: "fixture-worker-value", BRIGHTDATA_API_KEY: "fixture-private-value" },
     true,
   );
-  assert.equal(setup.apiKeyConfigured, true);
-  assert.equal(setup.rightsConfirmed, false);
-  assert.equal(setup.ready, false);
-  assert.ok(!JSON.stringify(setup).includes("fixture-"));
+  assert.equal(off.ready, false);
+  assert.equal(off.scraperConfigured, false);
+  // Com o microserviço configurado, a fonte fica pronta.
+  const on = providerSetup(
+    { WORKER_TOKEN: "fixture-worker-value", SCRAPER_URL: "http://localhost:8000" },
+    true,
+  );
+  assert.equal(on.ready, true);
+  assert.equal(on.scraperConfigured, true);
+  assert.ok(!JSON.stringify(on).includes("fixture-"));
 });
 test("listing URL e keyword vazia retornam erro de entrada útil", () => {
   assert.throws(

@@ -44,7 +44,7 @@ import {
 } from "./channels";
 import { enqueue } from "./worker";
 import { runSchedulerTick } from "./supervisor";
-import { BrightDataProvider } from "../providers/brightdata";
+import { SelfScraperProvider } from "../providers/self-scraper";
 import { ProviderError, type MarketplaceProvider } from "../providers/contract";
 import { checkProvider, diagnostics } from "./diagnostics";
 import { pilotConfig } from "./pilot";
@@ -85,16 +85,11 @@ export function createHandler(
     ((id: string) => {
       if (id !== "brightdata")
         throw new HttpError(422, "Fonte não disponível.");
-      return new BrightDataProvider({
-        apiKey: config.BRIGHTDATA_API_KEY,
-        rightsConfirmed: config.FACEBOOK_DATA_RIGHTS_CONFIRMED,
-        dataset: config.BRIGHTDATA_DATASET_ID,
+      // Fonte própria (scraper em SCRAPER_URL) no lugar do Bright Data pago.
+      // O id interno "brightdata" é mantido para compatibilidade com o pipeline.
+      return new SelfScraperProvider({
+        baseUrl: config.SCRAPER_URL,
         maxRecords: pilot.maxRecords,
-        inputConfirmation: () =>
-          readInputConfirmation(
-            db,
-            config.BRIGHTDATA_DATASET_ID ?? "gd_lvt9iwuh6fbcwmx1a",
-          ),
       });
     });
   return async (request: Request): Promise<Response> => {

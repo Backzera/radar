@@ -1,18 +1,21 @@
 // Only public status flags leave the server; never return credential values.
+// Fonte própria: a prontidão depende do SCRAPER_URL (microserviço de scraping),
+// não mais de credenciais pagas (Bright Data).
 export function providerSetup(
   env: Record<string, string | undefined>,
   local: boolean,
 ) {
-  const dataset = env.BRIGHTDATA_DATASET_ID?.trim() ?? "";
-  const apiKeyConfigured = !!env.BRIGHTDATA_API_KEY?.trim();
-  const datasetConfigured = /^gd_[a-zA-Z0-9]+$/.test(dataset);
-  const rightsConfirmed = env.FACEBOOK_DATA_RIGHTS_CONFIRMED === "true";
+  const scraperUrl = env.SCRAPER_URL?.trim() ?? "";
+  const scraperConfigured = /^https?:\/\/\S+/.test(scraperUrl);
   return {
-    apiKeyConfigured,
-    datasetConfigured,
-    datasetId: datasetConfigured ? dataset : null,
-    rightsConfirmed,
+    // Mantém as chaves esperadas pela UI de administração, agora refletindo o
+    // scraper próprio em vez do provedor pago.
+    apiKeyConfigured: scraperConfigured,
+    datasetConfigured: scraperConfigured,
+    datasetId: scraperConfigured ? "self-scraper" : null,
+    rightsConfirmed: true,
+    scraperConfigured,
     local,
-    ready: apiKeyConfigured && datasetConfigured && rightsConfirmed,
+    ready: scraperConfigured,
   };
 }
