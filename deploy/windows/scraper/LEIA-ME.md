@@ -42,10 +42,11 @@ arquivo **`fb_cookies.json`** dentro de `C:\brique\scraper`. Duas formas:
   Abre o navegador; faça login no Facebook e abra o Marketplace. Ele salva o
   `fb_cookies.json` sozinho.
 
-Depois de colocar os cookies, reinicie a tarefa (ou rode o instalador de novo):
+Depois de colocar os cookies, reinicie a tarefa (parar e iniciar):
 
 ```powershell
-Restart-ScheduledTask -TaskName "Market Radar Scraper (brique)"
+Stop-ScheduledTask  -TaskName "Market Radar Scraper (brique)"
+Start-ScheduledTask -TaskName "Market Radar Scraper (brique)"
 ```
 
 ## Habilitar a fonte no site
