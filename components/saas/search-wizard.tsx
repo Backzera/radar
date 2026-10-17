@@ -44,7 +44,7 @@ export function initialSearchValues(
         active: true,
         mode: "combined",
         intervalSeconds: Math.max(b.account.plan.minInterval, 300),
-        resultsPerSearch: Math.min(b.service.maxRecords, 10),
+        resultsPerSearch: Math.min(b.service.maxRecords, 25),
         notifyNew: b.account.preferences.notifyNew ?? true,
         notifyDrops: b.account.preferences.notifyDrops ?? true,
       };
@@ -334,7 +334,9 @@ export function SearchWizard({
               <strong>{product.model || "Busca por descrição"}</strong>
               <p>
                 {product.model
-                  ? `Procuraremos exatamente este modelo${product.storage ? ` de ${product.storage}` : ""}. Outras versões não são incluídas.`
+                  ? personal
+                    ? `Procuraremos exatamente este modelo${product.storage ? ` de ${product.storage}` : ""}. Outras versões não são incluídas.`
+                    : `Procuraremos este modelo${product.storage ? ` de ${product.storage}` : ""} e versões superiores da mesma linha (ex.: Pro, Pro Max ou geração mais nova), desde que dentro do seu teto de preço.`
                   : "Variações de escrita serão consideradas, sem estimar revenda quando não houver dados suficientes."}
               </p>
             </div>

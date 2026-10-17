@@ -1,6 +1,7 @@
 import { excludedEvidence, withoutNegatedRisks } from "./text";
 import { publicationWindow, isWorkingCandidate } from "./selection";
 import { automaticQueries } from "./query-strategy";
+import { isSameOrNewer } from "./model-rank";
 import { words, saleDescription } from "./text";
 import { purchasePolicy } from "./purchase-policy";
 import type { Analysis, Listing, Monitor, Settings, Pricing } from "./types";
@@ -29,13 +30,22 @@ export function monitorMismatch(
 ): { code: string; evidence: string }[] {
   const reasons: { code: string; evidence: string }[] = [];
   const target = normalize({ title: m.product || m.query, description: "" });
+  // Em radares de revenda, aceitamos o modelo buscado OU um superior da mesma
+  // linha (ex.: iPhone 11 -> 11 Pro/Pro Max, iPhone 12 -> 13+). O teto de preço,
+  // aplicado adiante, corta o que passa do valor. Em "comprar para mim" mantém-se
+  // o modelo exato.
+  const upgradeAllowed =
+    m.intent === "resale" &&
+    !!target.model &&
+    !l.product.ambiguous &&
+    isSameOrNewer(target.model, l.product.model);
   if (l.product.ambiguous)
     reasons.push({
       code: "ambiguous_product",
       evidence:
         "O anúncio menciona mais de um produto. Confira a versão antes de comprar.",
     });
-  if (target.model && target.model !== l.product.model)
+  if (target.model && target.model !== l.product.model && !upgradeAllowed)
     reasons.push({
       code: "product_model",
       evidence: "Modelo diferente ou insuficientemente identificado",
@@ -64,7 +74,7 @@ export function monitorMismatch(
           .filter(Boolean)
           .every((t) => text.includes(t)),
     );
-  if (m.queryType !== "search_url" && !match)
+  if (m.queryType !== "search_url" && !match && !upgradeAllowed)
     reasons.push({
       code: "query",
       evidence: "Os termos de pesquisa não correspondem ao anúncio",
