@@ -99,14 +99,17 @@ start();
 // Worker: sem ele a fila de buscas nunca é processada. Como o app roda compilado
 // (app\server.js) e não pelo "npm run dev", é aqui que o tick periódico é disparado.
 async function startWorker() {
-  const origin = `http://${env.HOST}:${env.PORT}`;
+  // O app é montado no prefixo do site (BASE_PATH, ex.: /brique). Sem ele o tick
+  // cai em 404. Local (sem prefixo) o BASE_PATH é vazio e a URL fica igual.
+  const base = (env.BASE_PATH ?? "").replace(/\/+$/, "");
+  const tickUrl = `http://${env.HOST}:${env.PORT}${base}/api/v1/worker/tick`;
   const tickMs = Math.max(5000, Number(env.WORKER_TICK_MS) || 10000);
   await delay(4000); // dá tempo do app subir antes do primeiro tick
-  note(`worker iniciado (tick ${tickMs / 1000}s) em ${origin}`);
+  note(`worker iniciado (tick ${tickMs / 1000}s) em ${tickUrl}`);
   let avisado = false;
   for (;;) {
     try {
-      const r = await fetch(`${origin}/api/v1/worker/tick`, {
+      const r = await fetch(tickUrl, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${env.WORKER_TOKEN}`,
