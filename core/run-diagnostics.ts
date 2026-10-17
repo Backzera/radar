@@ -37,11 +37,7 @@ export function runFailureAdvice(raw: unknown) {
     : null;
   let summary = "A busca não foi concluída.",
     action = "Consulte o diagnóstico desta execução antes de tentar novamente.";
-  if (error.code === "native_filters_unconfirmed") {
-    summary = "Os filtros escolhidos ainda precisam de confirmação na fonte.";
-    action =
-      "Abra Administração → Filtros da busca e confirme período e unidade do raio. Nenhuma coleta com critérios diferentes será enviada.";
-  } else if (/informe city|city.*obrigat/.test(message)) {
+  if (/informe city|city.*obrigat/.test(message)) {
     summary = "A cidade não foi recebida pela fonte de dados.";
     action =
       "Confira a cidade em Revisar critérios. O envio da cidade de buscas antigas foi corrigido nesta atualização.";
@@ -59,7 +55,7 @@ export function runFailureAdvice(raw: unknown) {
   } else if (/sem confirmação|incerto|sem snapshot_id/.test(message)) {
     summary = "Não foi possível confirmar se a fonte iniciou a coleta.";
     action =
-      "Não repita a coleta. A administração deve conferir a execução na Bright Data para evitar consumo duplicado.";
+      "Não repita a coleta automaticamente; confira a execução da fonte antes de tentar de novo.";
   } else if (/http 429|limite diário|limite do provider/.test(message)) {
     summary = "O limite de uso impediu esta tentativa.";
     action =

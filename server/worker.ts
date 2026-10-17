@@ -96,7 +96,7 @@ async function enqueueMonitor(
     .first<{ id: string }>();
   if (uncertain)
     throw new ProviderError(
-      "Disparo anterior sem confirmação neste monitor/teste. Confira a Bright Data e reconcilie a execução antes de repetir.",
+      "Disparo anterior sem confirmação neste monitor/teste. Confira a fonte e reconcilie a execução antes de repetir.",
       false,
     );
   const r = await db
@@ -176,7 +176,7 @@ export async function enqueueTest(
       .join("");
   const monitor: Monitor = {
     ...monitorSchema.parse({
-      name: "Teste manual Bright Data",
+      name: "Teste manual da fonte",
       query: q.type === "keyword" ? q.keyword : "",
       queryType: q.type,
       providerFilters: q.filters,

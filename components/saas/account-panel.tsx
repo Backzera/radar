@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { NativeFilterPanel } from "./native-filter-panel";
 import type { QualitySummary } from "../../server/quality";
 import type { Bootstrap } from "../../server/bootstrap";
 import type { Alert, Purchase } from "../../core/types";
@@ -432,7 +431,6 @@ export function AdminPanel() {
       >
         Validar configuração, sem coleta
       </button>
-      <NativeFilterPanel />
       {(error || r.error) && (
         <p role="alert" className="saas-error">
           {error || r.error}

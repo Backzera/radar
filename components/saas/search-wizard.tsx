@@ -566,17 +566,6 @@ export function SearchWizard({
               habilitado. Cotas e disponibilidade podem adiar a próxima
               tentativa.
             </p>
-            {b.service.ready &&
-              ((numeric("maxListingAgeMinutes") <= 1440
-                ? !b.service.nativeOneDaySupported
-                : b.service.nativeRecency !== "native") ||
-                !b.service.nativeRadiusConfirmed) && (
-                <p className="saas-note" role="status">
-                  A administração precisa confirmar o período e a unidade do
-                  raio em Filtros da busca. Não iniciaremos uma coleta com
-                  período diferente ou sem o raio escolhido.
-                </p>
-              )}
             <div className="saas-note">
               {!b.service.ready || !b.service.collectionEnabled
                 ? "A busca será salva. A execução depende da habilitação administrativa da fonte."

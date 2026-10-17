@@ -1,8 +1,3 @@
-import {
-  readInputConfirmation,
-  inputConfirmationView,
-  saveInputConfirmation,
-} from "./input-confirmation";
 import { qualitySummary } from "./quality";
 import { z } from "zod";
 import { all, getMonitors, getPurchases, uid, type Database } from "./store";
@@ -427,18 +422,6 @@ export function createHandler(
             hasNext: rows.length === q.limit,
           });
         }
-        if (path === "admin/provider/filters") {
-          const dataset =
-            config.BRIGHTDATA_DATASET_ID ?? "gd_lvt9iwuh6fbcwmx1a";
-          const health = await factory("brightdata").healthCheck();
-          return json(
-            inputConfirmationView(
-              health,
-              dataset,
-              await readInputConfirmation(db, dataset),
-            ),
-          );
-        }
         if (path === "admin/status")
           return json({
             diagnostics: await diagnostics(db, userId, pilot),
@@ -651,21 +634,6 @@ export function createHandler(
           return json(
             await checkProvider(db, "system:provider", factory("brightdata")),
           );
-        }
-        if (path === "admin/provider/filters") {
-          const dataset =
-            config.BRIGHTDATA_DATASET_ID ?? "gd_lvt9iwuh6fbcwmx1a";
-          const provider = factory("brightdata");
-          const health = await provider.healthCheck();
-          const result = await saveInputConfirmation(
-            db,
-            userId,
-            health,
-            dataset,
-            body,
-          );
-          await checkProvider(db, "system:provider", provider);
-          return json(result);
         }
         if (path === "admin/plans") {
           const d = z

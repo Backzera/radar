@@ -125,7 +125,7 @@ export const monitorSchema = z
         path: ["searchUrl"],
         message:
           searchUrlError(m.searchUrl ?? "") ??
-          "Use a fonte Facebook · Bright Data para uma URL de pesquisa.",
+          "Use a fonte Facebook para uma URL de pesquisa.",
       });
     if (m.minPrice > m.maxPrice)
       ctx.addIssue({
