@@ -17,6 +17,7 @@ import {
   errorText,
   money,
   when,
+  whenDate,
   safeListingUrl,
 } from "./client";
 type Feed = Awaited<ReturnType<typeof getFeed>>;
@@ -314,7 +315,9 @@ export function ResultsFeed({
                       {l.publishedAt && l.publicationStatus === "valid"
                         ? l.publicationSource === "badge"
                           ? "Recém-publicado segundo o Facebook · sem data exata"
-                          : relativePublication(l.publishedAt)
+                          : `Publicado em ${whenDate(l.publishedAt)} · ${relativePublication(
+                              l.publishedAt,
+                            ).replace(/^Publicado /, "")}`
                         : `Data não confirmada · confira no anúncio · visto ${when(l.firstSeenAt)}`}
                     </p>
                     <p>
@@ -591,7 +594,9 @@ export function ListingDialog({
               ? "Recém-publicado segundo o Facebook · sem data exata"
               : o.listing.publishedAt &&
                   o.listing.publicationStatus === "valid"
-                ? relativePublication(o.listing.publishedAt)
+                ? `Publicado em ${whenDate(o.listing.publishedAt)} · ${relativePublication(
+                    o.listing.publishedAt,
+                  ).replace(/^Publicado /, "")}`
                 : "Data não confirmada · confira no anúncio"}{" "}
             · {explanation.initial || "Encontrado pelo seu radar."}
           </p>

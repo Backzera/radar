@@ -81,6 +81,9 @@ export const money = (value: number | null | undefined) =>
       }).format(value);
 export const when = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleString("pt-BR") : "Ainda não registrada";
+// Apenas a data (sem hora), para exibir "quando o anúncio foi publicado".
+export const whenDate = (value: string | null | undefined) =>
+  value ? new Date(value).toLocaleDateString("pt-BR") : "";
 export function safeListingUrl(value: string | undefined) {
   try {
     const u = new URL(value ?? "");
