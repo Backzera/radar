@@ -20,6 +20,11 @@
 # Env:
 #   FB_COOKIES = JSON (lista de cookies no formato Playwright) da conta operadora.
 #                Veja README.md para gerar.
+#   SCRAPER_PROXY = proxy opcional para o navegador sair por outro IP (ex.: residencial).
+#                Formatos: "host:porta", "host:porta:usuario:senha" ou
+#                "socks5://usuario:senha@host:porta". Também pode ficar num
+#                arquivo proxy.txt ao lado deste app (ignorado pelo git).
+#   SCRAPER_PROXY_SCHEME = esquema quando o proxy não traz um (padrão: socks5).
 
 import json
 import os
@@ -30,6 +35,8 @@ from urllib.parse import quote
 from fastapi import FastAPI
 from pydantic import BaseModel
 from scrapling.fetchers import StealthyFetcher
+
+import relay
 
 ITEM_RE = re.compile(r"/marketplace/item/(\d+)")
 # Selos/rotulos do card que NAO sao o titulo do produto.
@@ -146,11 +153,101 @@ def load_cookies():
         return None
 
 
+_RELAY = {"server": None}
+
+
+def _parse_proxy():
+    """Lê o proxy de SCRAPER_PROXY ou, se vazio, do arquivo proxy.txt (cwd ou ao
+    lado deste app). Formatos aceitos:
+      host:porta
+      host:porta:usuario:senha
+      scheme://host:porta
+      scheme://usuario:senha@host:porta
+    Sem esquema, usa SCRAPER_PROXY_SCHEME (padrão socks5).
+    Retorna (scheme, host, port, user, pwd) ou None. Nunca loga o segredo."""
+    raw = os.environ.get("SCRAPER_PROXY", "").strip()
+    if not raw:
+        here = os.path.dirname(os.path.abspath(__file__))
+        for path in (os.path.join(os.getcwd(), "proxy.txt"), os.path.join(here, "proxy.txt")):
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    raw = fh.read().strip()
+            except Exception:
+                raw = ""
+            if raw:
+                break
+    if not raw:
+        return None
+    raw = raw.splitlines()[0].strip()  # ignora comentários/linhas extras
+    if not raw or raw.startswith("#"):
+        return None
+    user = pwd = None
+    if "://" in raw:
+        scheme, rest = raw.split("://", 1)
+        if "@" in rest:
+            creds, hostport = rest.rsplit("@", 1)
+            if ":" in creds:
+                user, pwd = creds.split(":", 1)
+            else:
+                user = creds
+        else:
+            hostport = rest
+        if ":" not in hostport:
+            return None
+        host, port = hostport.rsplit(":", 1)
+    else:
+        scheme = os.environ.get("SCRAPER_PROXY_SCHEME", "").strip() or "socks5"
+        parts = raw.split(":")
+        if len(parts) >= 4:
+            host, port, user, pwd = parts[0], parts[1], parts[2], ":".join(parts[3:])
+        elif len(parts) == 3:
+            host, port, user = parts
+        elif len(parts) == 2:
+            host, port = parts
+        else:
+            return None
+    return scheme.lower(), host, port, (user or None), pwd
+
+
+def _ensure_relay(host: str, port: str, user: str, pwd) -> str:
+    """O navegador (playwright/Camoufox) NÃO autentica em proxy SOCKS5. Então, para
+    um SOCKS5 com usuário/senha, subimos um relay local (relay.py) que resolve a
+    autenticação com o proxy e expõe um HTTP SEM senha em 127.0.0.1 — é esse que o
+    navegador usa. O relay sobe uma vez por processo."""
+    if _RELAY["server"]:
+        return _RELAY["server"]
+    local_port = int(os.environ.get("SCRAPER_PROXY_RELAY_PORT", "") or 0) or relay.free_port()
+    relay.start(host, port, user, pwd, local_port)
+    _RELAY["server"] = f"http://127.0.0.1:{local_port}"
+    return _RELAY["server"]
+
+
+def load_proxy():
+    """Monta o proxy no formato do Playwright para o navegador sair por outro IP.
+    Sem auth, ou auth HTTP(S): usa direto. SOCKS5 com auth: sobe o relay local e
+    aponta pra ele. Retorna {server, username?, password?} ou None."""
+    parsed = _parse_proxy()
+    if not parsed:
+        return None
+    scheme, host, port, user, pwd = parsed
+    if user and scheme.startswith("socks"):
+        return {"server": _ensure_relay(host, port, user, pwd)}
+    proxy = {"server": f"{scheme}://{host}:{port}"}
+    if user:
+        proxy["username"] = user
+    if pwd is not None:
+        proxy["password"] = pwd
+    return proxy
+
+
 def fetch_page(url: str):
     kwargs = dict(headless=True, network_idle=True)
     cookies = load_cookies()
     if cookies:
         kwargs["cookies"] = cookies  # ajuste conforme a versão do Scrapling, se preciso
+    proxy = load_proxy()
+    if proxy:
+        kwargs["proxy"] = proxy
     return StealthyFetcher.fetch(url, **kwargs)
 
 
