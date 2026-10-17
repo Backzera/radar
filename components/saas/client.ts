@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
+import { withBase } from "../brick/base";
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -14,7 +15,7 @@ export async function request<T>(
   body?: unknown,
   signal?: AbortSignal,
 ): Promise<T> {
-  const response = await fetch(`/api/v1/${path}`, {
+  const response = await fetch(withBase(`/api/v1/${path}`), {
     method: body === undefined ? "GET" : "POST",
     credentials: "same-origin",
     headers:

@@ -13,6 +13,7 @@ import {
 import type { Bootstrap } from "../../server/bootstrap";
 import type { Monitor } from "../../core/types";
 import { isUnlimitedTriggers } from "../../core/limits";
+import { withBase } from "../brick/base";
 import { useResource, request, errorText } from "./client";
 import { SearchWizard, type Draft } from "./search-wizard";
 import { SearchList } from "./search-list";
@@ -56,7 +57,7 @@ export function RadarShell({ embedded = false }: { embedded?: boolean } = {}) {
   }, []);
   useEffect(() => {
     if (!hasData) return;
-    const events = new EventSource("/api/v1/events");
+    const events = new EventSource(withBase("/api/v1/events"));
     let previous = "",
       timer: ReturnType<typeof setTimeout> | undefined;
     events.onopen = () => setConnected(true);
