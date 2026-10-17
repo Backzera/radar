@@ -14,6 +14,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { randomBytes } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 
 const root = import.meta.dirname;
 const envFile = join(root, ".env");
@@ -33,6 +35,13 @@ const defaults = {
   NODE_NO_WARNINGS: "1",
 };
 for (const [key, value] of Object.entries(defaults)) env[key] ||= value;
+// O worker (processador da fila de buscas) autentica no app com WORKER_TOKEN.
+// A conta do serviço não pode escrever o .env, então, se não houver um token
+// válido, geramos um aqui e passamos ao app e ao worker (ambos usam o mesmo).
+const validToken = (t) =>
+  typeof t === "string" && t.length >= 32 && !/[^\x21-\x7e]/.test(t);
+if (!validToken(env.WORKER_TOKEN))
+  env.WORKER_TOKEN = randomBytes(32).toString("base64url");
 const logDir = join(env.DATA_DIR, "logs");
 mkdirSync(logDir, { recursive: true });
 for (const name of readdirSync(logDir)) {
@@ -86,3 +95,37 @@ function start() {
 note("supervisor iniciado");
 if (envError) note(`não consegui ler o .env (${envError.message}); seguindo com os valores padrão`);
 start();
+
+// Worker: sem ele a fila de buscas nunca é processada. Como o app roda compilado
+// (app\server.js) e não pelo "npm run dev", é aqui que o tick periódico é disparado.
+async function startWorker() {
+  const origin = `http://${env.HOST}:${env.PORT}`;
+  const tickMs = Math.max(5000, Number(env.WORKER_TICK_MS) || 10000);
+  await delay(4000); // dá tempo do app subir antes do primeiro tick
+  note(`worker iniciado (tick ${tickMs / 1000}s) em ${origin}`);
+  let avisado = false;
+  for (;;) {
+    try {
+      const r = await fetch(`${origin}/api/v1/worker/tick`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.WORKER_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+        signal: AbortSignal.timeout(90_000),
+      });
+      await r.text().catch(() => {});
+      if (!r.ok) {
+        note(`worker: o app recusou o tick (${r.status})`);
+      } else if (!avisado) {
+        note("worker: processando a fila normalmente");
+        avisado = true;
+      }
+    } catch {
+      // App ainda subindo, ou o tick demorou: tenta no próximo ciclo.
+    }
+    await delay(tickMs);
+  }
+}
+startWorker();
