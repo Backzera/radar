@@ -313,7 +313,7 @@ export function ResultsFeed({
                         ? l.publicationSource === "badge"
                           ? "Recém-publicado segundo o Facebook · sem data exata"
                           : relativePublication(l.publishedAt)
-                        : `Publicação desconhecida · Visto: ${when(l.firstSeenAt)}`}
+                        : `Data não confirmada · confira no anúncio · visto ${when(l.firstSeenAt)}`}
                     </p>
                     <p>
                       {a.budgetEligible
@@ -587,7 +587,10 @@ export function ListingDialog({
             {o.listing.publicationStatus === "valid" &&
             o.listing.publicationSource === "badge"
               ? "Recém-publicado segundo o Facebook · sem data exata"
-              : relativePublication(o.listing.publishedAt)}{" "}
+              : o.listing.publishedAt &&
+                  o.listing.publicationStatus === "valid"
+                ? relativePublication(o.listing.publishedAt)
+                : "Data não confirmada · confira no anúncio"}{" "}
             · {explanation.initial || "Encontrado pelo seu radar."}
           </p>
           <div className="saas-actions">

@@ -68,6 +68,7 @@ export const monitorSchema = z
       .nullable()
       .default(1440),
     resultsPerSearch: z.number().int().min(1).max(50).default(10),
+    includeUndated: z.boolean().default(false),
     costs: costsSchema.nullable().default(null),
     name: z.string().trim().min(2).max(100),
     query: z.string().trim().max(150).default(""),

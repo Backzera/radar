@@ -88,6 +88,10 @@ export interface Monitor {
   expectedQuickSalePrice?: number | null;
   minProfit?: number;
   maxListingAgeMinutes?: number | null;
+  // Mostra também anúncios SEM data confirmada (a fonte não expôs data). Eles
+  // entram na vitrine rotulados "data não confirmada"; datas comprovadamente
+  // antigas ou futuras seguem fora. Não dispara alerta por anúncio sem data.
+  includeUndated?: boolean;
   resultsPerSearch?: number;
   costs?: Costs | null;
   providerFilters?: Record<string, string | number>;

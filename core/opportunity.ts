@@ -350,13 +350,25 @@ export function analyze(
   // Budget matching and financial approval are deliberately distinct.
   const generic = monitor?.identificationMode === "generic" || !l.product.model;
   const personal = monitor?.intent === "personal";
+  // Anúncio sem data confirmada: a fonte não expôs data (status "missing"/
+  // "untrusted" ou publishedAt nulo). Datas comprovadamente antigas/futuras NÃO
+  // contam como "sem data" — essas seguem fora. Com includeUndated, o sem-data
+  // entra na vitrine (rotulado), mas nunca é tratado como "recente".
+  const noConfirmedDate =
+    !l.publishedAt ||
+    l.publicationStatus === "missing" ||
+    l.publicationStatus === "untrusted";
+  const badDate =
+    l.publicationStatus === "future" || l.publicationStatus === "invalid";
+  const undatedOk = !!monitor?.includeUndated && noConfirmedDate && !badDate;
+  const withinWindow = window.valid || undatedOk;
   const budgetEligible =
     !!monitor &&
     monitor.active &&
     !monitor.archived &&
     !l.demo &&
     matchesMonitor(l, monitor) &&
-    window.valid &&
+    withinWindow &&
     isWorkingCandidate(l, monitor) &&
     partial.length === 0 &&
     !invalidPrice &&
@@ -391,7 +403,13 @@ export function analyze(
     quality >= 60 &&
     risk <= Math.min(35, monitor?.maxRisk ?? settings.maxRisk);
   return {
-    displayExpiresAt: window.expiresAt,
+    displayExpiresAt:
+      window.expiresAt ??
+      (undatedOk
+        ? new Date(
+            Date.parse(l.firstSeenAt) + (maxAge ?? 0) * 60000,
+          ).toISOString()
+        : null),
     publicationEligible: window.valid,
     classification,
     budgetEligible,

@@ -45,6 +45,7 @@ export function initialSearchValues(
         mode: "combined",
         intervalSeconds: Math.max(b.account.plan.minInterval, 300),
         resultsPerSearch: Math.min(b.service.maxRecords, 25),
+        includeUndated: true,
         notifyNew: b.account.preferences.notifyNew ?? true,
         notifyDrops: b.account.preferences.notifyDrops ?? true,
       };
@@ -356,8 +357,9 @@ export function SearchWizard({
                 <option value="1440">Nas últimas 24 horas</option>
               </select>
               <small>
-                Não mostramos anúncios antigos ou sem data confirmada nas
-                oportunidades.
+                {personal
+                  ? "Não mostramos anúncios antigos ou sem data confirmada nas oportunidades."
+                  : "Anúncios com data comprovadamente antiga ficam de fora. Quando o Facebook não informa a data, mostramos assim mesmo, marcados como “data não confirmada” para você conferir no anúncio."}
               </small>
             </label>
             <label className="saas-field">

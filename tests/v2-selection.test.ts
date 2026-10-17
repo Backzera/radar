@@ -167,3 +167,54 @@ test("2.0: datas ausentes, futuras e não confiáveis não viram oportunidades; 
     false,
   );
 });
+
+test("2.0: includeUndated mostra anúncio sem data (rotulado), sem fingir recência; antigo/futuro/fora do teto seguem fora", () => {
+  const base = {
+    ...monitor,
+    query: "iPhone 14",
+    intent: "resale" as const,
+    minPrice: 0,
+    maxPrice: 2200,
+    maxRisk: 100,
+    minScore: 0,
+    minRoi: 0,
+    maxListingAgeMinutes: 10080,
+  };
+  const undated = listing("iPhone 14 128GB", 0, "u1", {
+    publishedAt: null,
+    publicationStatus: "missing",
+    publicationConfidence: 0,
+    price: 1800,
+    firstSeenAt: recent.toISOString(),
+  });
+  // Sem a opção, anúncio sem data continua fora da vitrine.
+  assert.equal(
+    analyze(undated, [undated], DEFAULT_SETTINGS, base, recent).budgetEligible,
+    false,
+  );
+  // Com includeUndated: entra na vitrine, mas sem fingir recência nem alertar.
+  const on = { ...base, includeUndated: true };
+  const a = analyze(undated, [undated], DEFAULT_SETTINGS, on, recent);
+  assert.equal(a.budgetEligible, true);
+  assert.equal(a.publicationEligible, false);
+  assert.equal(a.notificationEligible, false);
+  assert.ok(a.displayExpiresAt && a.displayExpiresAt > recent.toISOString());
+  // Data comprovadamente antiga segue fora mesmo com includeUndated.
+  const old = listing("iPhone 14 128GB", 60, "u2", { price: 1800 });
+  assert.equal(
+    analyze(old, [old], DEFAULT_SETTINGS, on, recent).budgetEligible,
+    false,
+  );
+  // Sem data mas acima do teto também não entra.
+  const pricey = listing("iPhone 14 128GB", 0, "u3", {
+    publishedAt: null,
+    publicationStatus: "missing",
+    publicationConfidence: 0,
+    price: 5000,
+    firstSeenAt: recent.toISOString(),
+  });
+  assert.equal(
+    analyze(pricey, [pricey], DEFAULT_SETTINGS, on, recent).budgetEligible,
+    false,
+  );
+});
