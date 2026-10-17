@@ -1,0 +1,6 @@
+# Segredos e artefatos locais do microserviço — NÃO versionar.
+fb_cookies.json
+fb_cookies*.json
+.venv/
+__pycache__/
+*.pyc

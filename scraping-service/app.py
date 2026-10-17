@@ -24,6 +24,7 @@
 import json
 import os
 import re
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 from fastapi import FastAPI
@@ -31,6 +32,60 @@ from pydantic import BaseModel
 from scrapling.fetchers import StealthyFetcher
 
 ITEM_RE = re.compile(r"/marketplace/item/(\d+)")
+# Selos/rotulos do card que NAO sao o titulo do produto.
+BADGE_RE = re.compile(
+    r"^(acabou de chegar|hoje|ontem|patrocinad|anúncio|an[uú]ncio|novo!?$|gr[aá]tis|free|"
+    r"h[aá] \d|\d+\s*(min|minuto|h|hora|dia|dias|semana|semanas|m[eê]s|meses))",
+    re.I,
+)
+# Recencia: os cards da busca do FB nao trazem data exata, mas trazem um selo de
+# "recem publicado" (ex.: "Acabou de chegar") e, em alguns casos, idade relativa
+# ("ha 3 dias", "ontem"). Como a busca e ordenada por creation_time_descend, esses
+# sinais vindos do proprio FB sao usados para estimar publishedAt. O app (worker)
+# so mostra anuncios dentro da janela do radar (ex.: 7 dias); sem esse sinal o item
+# fica sem data confirmada e e filtrado — comportamento honesto, nao um palpite.
+FRESH_NOW_RE = re.compile(
+    r"acabou de chegar|rec[eé]m[- ]?(?:chegad|publicad|anunciad)|novo an[uú]ncio|"
+    r"publicado agora|just listed|newly listed",
+    re.I,
+)
+REL_AGE_RE = re.compile(
+    r"h[aá]\s+(\d+)\s*(minutos?|min|horas?|h|dias?|semanas?|m[eê]s(?:es)?|meses)\b", re.I
+)
+_UNIT_MINUTES = {
+    "min": 1, "minuto": 1, "minutos": 1,
+    "h": 60, "hora": 60, "horas": 60,
+    "dia": 1440, "dias": 1440,
+    "semana": 10080, "semanas": 10080,
+    "mes": 43200, "mês": 43200, "meses": 43200,
+}
+
+
+def _iso(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def parse_published(lines):
+    """Estima publishedAt (ISO UTC) a partir dos sinais de recencia do card do FB.
+    Retorna None quando o FB nao expoe nenhum sinal (o item fica sem data)."""
+    now = datetime.now(timezone.utc)
+    for raw in lines:
+        low = raw.strip().lower()
+        if not low:
+            continue
+        if FRESH_NOW_RE.search(low) or low == "hoje":
+            return _iso(now)
+        if low == "ontem":
+            return _iso(now - timedelta(days=1))
+        m = REL_AGE_RE.search(low)
+        if m:
+            unit = m.group(2).lower()
+            mins = _UNIT_MINUTES.get(unit)
+            if mins:
+                return _iso(now - timedelta(minutes=int(m.group(1)) * mins))
+    return None
+
+
 app = FastAPI(title="market-radar-scraper")
 
 
@@ -72,11 +127,17 @@ def canonical(href: str) -> str:
 
 
 def load_cookies():
+    # 1) via env FB_COOKIES (JSON); 2) via arquivo FB_COOKIES_FILE (padrão fb_cookies.json)
     raw = os.environ.get("FB_COOKIES", "").strip()
-    if not raw:
-        return None
+    if raw:
+        try:
+            return json.loads(raw)
+        except Exception:
+            return None
+    path = os.environ.get("FB_COOKIES_FILE", "fb_cookies.json")
     try:
-        return json.loads(raw)
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
     except Exception:
         return None
 
@@ -94,15 +155,32 @@ def card_to_item(anchor) -> dict | None:
     m = ITEM_RE.search(href)
     if not m:
         return None
-    text = [t.strip() for t in anchor.get_all_text(separator="\n").split("\n") if t.strip()]
-    price_line = next((l for l in text if re.search(r"r\$|gr[aá]tis|free", l, re.I)), "")
-    title = next(
-        (l for l in text
-         if l != price_line and not re.match(r"^[^,]+,\s*[A-Z]{2}$", l) and len(l) > 3),
-        "",
-    )
-    location = next((l for l in reversed(text) if re.match(r"^[^,]+,\s*[A-Z]{2}$", l)), "")
-    img = anchor.css_first("img")
+    text = [t for t in anchor.get_all_text(separator="\n", strip=True).split("\n") if t]
+
+    def is_loc(l):
+        return bool(re.match(r"^[^,]+,\s*[A-Z]{2}$", l))
+
+    def is_price(l):
+        return bool(re.search(r"r\$|gr[aá]tis|free", l, re.I))
+
+    def is_badge(l):
+        return bool(BADGE_RE.search(l))
+
+    price_line = next((l for l in text if is_price(l)), "")
+    price_idx = next((i for i, l in enumerate(text) if is_price(l)), None)
+    # Titulo: no card do FB vem logo DEPOIS do preco (pulando selos/localizacao).
+    title = ""
+    if price_idx is not None:
+        for l in text[price_idx + 1:]:
+            if not is_loc(l) and not is_badge(l) and not is_price(l) and len(l) > 3:
+                title = l
+                break
+    if not title:
+        cands = [l for l in text if l != price_line and not is_loc(l) and not is_badge(l) and not is_price(l) and len(l) > 3]
+        title = max(cands, key=len) if cands else ""
+    location = next((l for l in reversed(text) if is_loc(l)), "")
+    imgs = anchor.css("img")
+    img = imgs[0] if imgs else None
     return {
         "listingId": m.group(1),
         "url": canonical(href),
@@ -111,7 +189,9 @@ def card_to_item(anchor) -> dict | None:
         "currency": "BRL",
         "location": location,
         "images": [img.attrib.get("src")] if img and img.attrib.get("src") else [],
-        "publishedAt": None,   # cards de busca não expõem data exata; filtro de recência é local
+        # Data exata não vem no card; usamos o sinal de recência do próprio FB
+        # ("Acabou de chegar", "há X dias", "ontem"). Sem sinal, fica None.
+        "publishedAt": parse_published(text),
         "sellerId": None,
         "condition": None,
     }
@@ -132,24 +212,30 @@ def search(inp: SearchInput):
     return {"items": list(seen.values())}
 
 
+def _first(sel):
+    return sel[0] if sel else None
+
+
 @app.post("/listing")
 def listing(inp: ListingInput):
+    m = ITEM_RE.search(inp.url)
+    if not m:
+        return {}, 404
     page = fetch_page(inp.url)
     if "/login" in (getattr(page, "url", "") or ""):
         return {"error": "sessao do Facebook necessaria"}, 503
-    a = page.css_first('a[href*="/marketplace/item/"]') or page
-    # Em detalhe, tentamos extrair do próprio documento.
-    m = ITEM_RE.search(inp.url)
-    title_el = page.css_first("h1") or page.css_first('[role="main"] span')
-    price_el = page.css_first('span:contains("R$")')
-    img = page.css_first('img[src*="fbcdn"]')
-    if not m:
-        return {}, 404
+    title_el = _first(page.css("h1")) or _first(page.css('[role="main"] span'))
+    img = _first(page.css('img[src*="fbcdn"]'))
+    price = None
+    for line in page.get_all_text(separator="\n", strip=True).split("\n"):
+        if re.search(r"r\$", line, re.I):
+            price = parse_price(line)
+            break
     return {
         "listingId": m.group(1),
         "url": canonical(inp.url),
-        "title": (title_el.text.strip() if title_el else ""),
-        "price": parse_price(price_el.text if price_el else ""),
+        "title": (str(title_el.text).strip() if title_el else ""),
+        "price": price,
         "currency": "BRL",
         "location": "",
         "images": [img.attrib.get("src")] if img and img.attrib.get("src") else [],
